@@ -1,0 +1,29 @@
+[package]
+name = "pgl-core"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+description = "PostgreSQL access, introspection and data transfer core for Postgres Lite"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }
+tokio-postgres = { version = "0.7", features = [
+    "with-chrono-0_4",
+    "with-uuid-1",
+    "with-serde_json-1",
+] }
+deadpool-postgres = "0.14"
+postgres-protocol = "0.6"
+tokio-postgres-rustls = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8"
+fallible-iterator = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+csv = "1"
+calamine = { version = "0.26", features = ["dates"] }
+rust_xlsxwriter = "0.79"
+futures-util = "0.3"
