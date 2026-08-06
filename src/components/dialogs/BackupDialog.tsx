@@ -198,6 +198,7 @@ export function RestoreDialog() {
   const [path, setPath] = useState('');
   const [stopOnError, setStopOnError] = useState(true);
   const [singleTransaction, setSingleTransaction] = useState(true);
+  const [allowMetaCommands, setAllowMetaCommands] = useState(false);
   const [busy, setBusy] = useState(false);
   const progress = useProgress(token, busy);
 
@@ -205,6 +206,8 @@ export function RestoreDialog() {
     if (open) {
       setBusy(false);
       setPath('');
+      // The override is per file, never sticky.
+      setAllowMetaCommands(false);
     }
   }, [open]);
 
@@ -227,7 +230,14 @@ export function RestoreDialog() {
       const outcome = await transfer.restore({
         connectionId,
         token,
-        request: { database, path, stopOnError, singleTransaction, binaryDirectory: null },
+        request: {
+          database,
+          path,
+          stopOnError,
+          singleTransaction,
+          binaryDirectory: null,
+          allowMetaCommands,
+        },
       });
       notify.success(
         'Restore complete',
@@ -277,6 +287,13 @@ export function RestoreDialog() {
               hint="All or nothing: a failure rolls the whole restore back."
               checked={singleTransaction}
               onCheckedChange={setSingleTransaction}
+            />
+            <CheckboxField
+              id="restore-meta"
+              label="Allow psql meta-commands"
+              hint="Only for a file you trust. A dump from pg_dump never needs this: \! runs a shell command and \i reads another file, neither of which the database sees."
+              checked={allowMetaCommands}
+              onCheckedChange={setAllowMetaCommands}
             />
           </div>
 
