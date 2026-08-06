@@ -198,6 +198,23 @@ case "$METHOD" in
     mkdir -p "$PREFIX"
     install -m755 "$WORK/$PACKAGE" "$PREFIX/wishpostgres"
 
+    # Lift the icon out of the AppImage, or the launcher entry below would point
+    # at an icon name nothing on the system provides. Best effort: a failure
+    # here costs an icon, not the installation.
+    icon="$HOME/.local/share/icons/hicolor/256x256/apps/wishpostgres.png"
+    (
+      cd "$WORK" && chmod +x "$PACKAGE" \
+        && ./"$PACKAGE" --appimage-extract 'wishpostgres.png' > /dev/null 2>&1
+    ) || true
+    extracted=$(find "$WORK/squashfs-root" -name 'wishpostgres.png' 2> /dev/null | head -1)
+    if [ -n "$extracted" ]; then
+      install -Dm644 "$extracted" "$icon"
+      command -v gtk-update-icon-cache > /dev/null 2>&1 \
+        && gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2> /dev/null || true
+    else
+      warn "could not read the icon out of the AppImage; the launcher entry will have none."
+    fi
+
     # A desktop entry, so it shows up in the launcher like a real application.
     desktop="$HOME/.local/share/applications/wishpostgres.desktop"
     mkdir -p "$(dirname "$desktop")"
@@ -205,12 +222,19 @@ case "$METHOD" in
 [Desktop Entry]
 Type=Application
 Name=WishPostgres
+GenericName=PostgreSQL Client
 Comment=A fast, lightweight PostgreSQL desktop manager
-Exec=$PREFIX/wishpostgres
+Exec=$PREFIX/wishpostgres %U
 Icon=wishpostgres
 Terminal=false
-Categories=Development;Database;
+StartupNotify=true
+StartupWMClass=wishpostgres
+Categories=Development;Database;GTK;
+Keywords=postgres;postgresql;sql;database;db;query;
 ENTRY
+
+    command -v update-desktop-database > /dev/null 2>&1 \
+      && update-desktop-database -q "$HOME/.local/share/applications" 2> /dev/null || true
 
     case ":$PATH:" in
       *":$PREFIX:"*) ;;
