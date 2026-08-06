@@ -134,9 +134,117 @@ fn dollar_tag(chars: &[char], start: usize) -> Option<String> {
     None
 }
 
+/// Statements PostgreSQL refuses to run through the extended query protocol,
+/// because that protocol wraps every statement in an implicit transaction and
+/// these commands cannot run inside a transaction block.
+///
+/// They are sent through the simple query protocol instead, which is how `psql`
+/// runs them.
+const SIMPLE_PROTOCOL_ONLY: [&[&str]; 10] = [
+    &["VACUUM"],
+    &["CREATE", "DATABASE"],
+    &["DROP", "DATABASE"],
+    &["ALTER", "DATABASE"],
+    &["CREATE", "TABLESPACE"],
+    &["DROP", "TABLESPACE"],
+    &["ALTER", "SYSTEM"],
+    &["REINDEX"],
+    &["CLUSTER"],
+    &["DISCARD"],
+];
+
+/// Whether a statement has to go through the simple query protocol.
+///
+/// `CREATE INDEX` and `DROP INDEX` only need it with `CONCURRENTLY`, and
+/// `REINDEX`/`CLUSTER` are listed unconditionally because their non-concurrent
+/// forms work either way.
+fn needs_simple_protocol(sql: &str) -> bool {
+    let words: Vec<String> = sql
+        .split_whitespace()
+        .take(4)
+        .map(|word| {
+            word.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_uppercase()
+        })
+        .filter(|word| !word.is_empty())
+        .collect();
+
+    if words.is_empty() {
+        return false;
+    }
+
+    if SIMPLE_PROTOCOL_ONLY.iter().any(|prefix| {
+        words.len() >= prefix.len()
+            && words[..prefix.len()]
+                .iter()
+                .zip(prefix.iter())
+                .all(|(word, expected)| word == expected)
+    }) {
+        return true;
+    }
+
+    matches!(words[0].as_str(), "CREATE" | "DROP") && words.contains(&"CONCURRENTLY".to_string())
+}
+
+/// Run a statement through the simple query protocol, where every value comes
+/// back as text and there is no implicit transaction.
+async fn execute_simple(client: &Client, sql: &str, started: Instant) -> CoreResult<QueryResult> {
+    use tokio_postgres::SimpleQueryMessage;
+
+    let messages = client.simple_query(sql).await?;
+    let command = leading_keyword(sql);
+
+    let mut columns: Vec<ResultColumn> = Vec::new();
+    let mut rows: Vec<Vec<Value>> = Vec::new();
+    let mut affected: Option<u64> = None;
+
+    for message in messages {
+        match message {
+            SimpleQueryMessage::RowDescription(description) => {
+                columns = description
+                    .iter()
+                    .map(|column| ResultColumn {
+                        name: column.name().to_string(),
+                        data_type: "text".to_string(),
+                        type_category: TypeCategory::Text,
+                    })
+                    .collect();
+            }
+            SimpleQueryMessage::Row(row) => {
+                rows.push(
+                    (0..row.len())
+                        .map(|index| match row.get(index) {
+                            Some(text) => Value::String(text.to_string()),
+                            None => Value::Null,
+                        })
+                        .collect(),
+                );
+            }
+            SimpleQueryMessage::CommandComplete(count) => {
+                affected = Some(affected.unwrap_or(0) + count);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(QueryResult {
+        row_count: rows.len(),
+        affected_rows: if columns.is_empty() { affected } else { None },
+        duration_ms: started.elapsed().as_millis() as u64,
+        command,
+        columns,
+        rows,
+        truncated: false,
+    })
+}
+
 /// Run a single statement and materialise its result.
 pub async fn execute_statement(client: &Client, sql: &str) -> CoreResult<QueryResult> {
     let started = Instant::now();
+    if needs_simple_protocol(sql) {
+        return execute_simple(client, sql, started).await;
+    }
+
     let statement = client.prepare(sql).await?;
     let command = leading_keyword(sql);
 
@@ -200,6 +308,23 @@ pub async fn execute_statement(client: &Client, sql: &str) -> CoreResult<QueryRe
         rows,
         truncated,
     })
+}
+
+/// Run one statement under an `EXPLAIN` prefix and return the plan as text.
+///
+/// Generic over the client so the caller can hand in a transaction: an
+/// `EXPLAIN ANALYZE` really executes its statement, so a plan for anything that
+/// writes has to be taken inside a transaction the caller then rolls back.
+pub async fn explain<C>(client: &C, statement: &str, prefix: &str) -> CoreResult<String>
+where
+    C: deadpool_postgres::GenericClient + Sync,
+{
+    let rows = client.query(&format!("{prefix}{statement}"), &[]).await?;
+    Ok(rows
+        .iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 /// Run every statement in a script, returning one result per statement.
@@ -270,6 +395,25 @@ mod tests {
     fn handles_escaped_quotes() {
         let parts = split_statements("SELECT 'it''s; fine'; SELECT 2");
         assert_eq!(parts.len(), 2);
+    }
+
+    #[test]
+    fn routes_transaction_hostile_statements_to_the_simple_protocol() {
+        assert!(needs_simple_protocol("VACUUM ANALYZE users"));
+        assert!(needs_simple_protocol("  vacuum full  "));
+        assert!(needs_simple_protocol("CREATE DATABASE shop"));
+        assert!(needs_simple_protocol("DROP DATABASE shop"));
+        assert!(needs_simple_protocol("ALTER SYSTEM SET work_mem = '64MB'"));
+        assert!(needs_simple_protocol("REINDEX TABLE users"));
+        assert!(needs_simple_protocol(
+            "CREATE INDEX CONCURRENTLY idx ON users (email)"
+        ));
+
+        assert!(!needs_simple_protocol("SELECT 1"));
+        assert!(!needs_simple_protocol("CREATE TABLE t (id int)"));
+        assert!(!needs_simple_protocol("CREATE INDEX idx ON users (email)"));
+        assert!(!needs_simple_protocol("UPDATE users SET name = 'vacuum'"));
+        assert!(!needs_simple_protocol(""));
     }
 
     #[test]

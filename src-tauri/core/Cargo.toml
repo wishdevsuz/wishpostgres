@@ -3,7 +3,7 @@ name = "pgl-core"
 version = "1.0.0"
 edition = "2021"
 license = "MIT"
-description = "PostgreSQL access, introspection and data transfer core for Postgres Lite"
+description = "PostgreSQL access, introspection and data transfer core for WishPostgres"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }

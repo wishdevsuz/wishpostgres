@@ -69,7 +69,10 @@ pub async fn relations(
     schema: &str,
     kinds: &[RelationKind],
 ) -> CoreResult<Vec<RelationInfo>> {
-    let wanted: Vec<String> = kinds.iter().map(|kind| relkind_code(*kind).to_string()).collect();
+    let wanted: Vec<String> = kinds
+        .iter()
+        .map(|kind| relkind_code(*kind).to_string())
+        .collect();
 
     let rows = client
         .query(
@@ -195,10 +198,15 @@ pub async fn columns(client: &Client, schema: &str, table: &str) -> CoreResult<V
 
     let rows = client
         .query(
+            // A column only counts as unique when it is the *whole* key of a
+            // unique constraint. A column of a composite UNIQUE(a, b) does not
+            // identify a row on its own, and treating it as if it did would let
+            // an inline edit update more rows than the user selected.
             "WITH keys AS (
                  SELECT contype, unnest(conkey) AS attnum
                  FROM pg_constraint
-                 WHERE conrelid = $1::text::regclass AND contype IN ('p', 'u')
+                 WHERE conrelid = $1::text::regclass
+                   AND (contype = 'p' OR (contype = 'u' AND array_length(conkey, 1) = 1))
              )
              SELECT a.attname::text,
                     format_type(a.atttypid, a.atttypmod),
@@ -238,11 +246,7 @@ pub async fn columns(client: &Client, schema: &str, table: &str) -> CoreResult<V
             let is_array: bool = row.get(13);
             ColumnMeta {
                 name: row.get(0),
-                type_category: TypeCategory::from_pg(
-                    base_type_name(&data_type),
-                    is_enum,
-                    is_array,
-                ),
+                type_category: TypeCategory::from_pg(base_type_name(&data_type), is_enum, is_array),
                 data_type,
                 nullable: row.get(2),
                 default: row.get(3),
@@ -347,11 +351,7 @@ pub async fn constraints(
         .collect())
 }
 
-pub async fn statistics(
-    client: &Client,
-    schema: &str,
-    table: &str,
-) -> CoreResult<TableStatistics> {
+pub async fn statistics(client: &Client, schema: &str, table: &str) -> CoreResult<TableStatistics> {
     let relation = quote_relation(schema, table)?;
 
     let row = client
@@ -431,7 +431,12 @@ pub async fn statistics(
 
 /// Global search across schemas, relations, columns and routines.
 pub async fn search(client: &Client, term: &str, limit: i64) -> CoreResult<Vec<SearchHit>> {
-    let pattern = format!("%{}%", term.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+    let pattern = format!(
+        "%{}%",
+        term.replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
 
     let rows = client
         .query(
@@ -574,8 +579,7 @@ pub async fn definition(client: &Client, schema: &str, table: &str) -> CoreResul
     lines.extend(constraints.iter().map(|constraint| {
         format!(
             "    CONSTRAINT {} {}",
-            crate::ident::quote_ident(&constraint.name)
-                .unwrap_or_else(|_| constraint.name.clone()),
+            crate::ident::quote_ident(&constraint.name).unwrap_or_else(|_| constraint.name.clone()),
             constraint.definition
         )
     }));
@@ -607,8 +611,7 @@ pub async fn definition(client: &Client, schema: &str, table: &str) -> CoreResul
             column.comment.as_ref().map(|comment| {
                 format!(
                     "COMMENT ON COLUMN {relation}.{} IS {};",
-                    crate::ident::quote_ident(&column.name)
-                        .unwrap_or_else(|_| column.name.clone()),
+                    crate::ident::quote_ident(&column.name).unwrap_or_else(|_| column.name.clone()),
                     crate::ident::quote_literal(comment)
                 )
             })

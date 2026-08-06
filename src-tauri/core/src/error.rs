@@ -174,7 +174,9 @@ fn report_from_postgres(error: tokio_postgres::Error) -> ErrorReport {
         hint: db.hint().map(str::to_string),
         position: match db.position() {
             Some(tokio_postgres::error::ErrorPosition::Original(p)) => Some(*p),
-            Some(tokio_postgres::error::ErrorPosition::Internal { position, .. }) => Some(*position),
+            Some(tokio_postgres::error::ErrorPosition::Internal { position, .. }) => {
+                Some(*position)
+            }
             None => None,
         },
         reason: Some(reason),
@@ -209,7 +211,8 @@ fn connection_advice(message: &str) -> (String, String) {
     if lower.contains("password") || lower.contains("authentication") {
         return (
             "The server rejected the supplied credentials.".into(),
-            "Re-enter the password, and confirm the user exists and is allowed in pg_hba.conf.".into(),
+            "Re-enter the password, and confirm the user exists and is allowed in pg_hba.conf."
+                .into(),
         );
     }
     (

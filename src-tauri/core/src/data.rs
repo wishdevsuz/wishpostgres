@@ -87,8 +87,14 @@ pub async fn browse(client: &Client, request: &BrowseRequest) -> CoreResult<Brow
         rows.push(values);
     }
 
-    let (total_rows, is_estimate) =
-        count_rows(client, &relation, &where_clause, &params, request.exact_count).await?;
+    let (total_rows, is_estimate) = count_rows(
+        client,
+        &relation,
+        &where_clause,
+        &params,
+        request.exact_count,
+    )
+    .await?;
 
     Ok(BrowseResult {
         columns,
@@ -193,7 +199,10 @@ fn build_where(
             | FilterOperator::StartsWith
             | FilterOperator::EndsWith => {
                 let raw = filter.value.clone().unwrap_or_default();
-                let escaped = raw.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+                let escaped = raw
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
                 let pattern = match filter.operator {
                     FilterOperator::StartsWith => format!("{escaped}%"),
                     FilterOperator::EndsWith => format!("%{escaped}"),
@@ -226,13 +235,25 @@ fn build_where(
         clauses.push(clause);
     }
 
-    if let Some(term) = request.search.as_ref().filter(|term| !term.trim().is_empty()) {
-        let escaped = term.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    if let Some(term) = request
+        .search
+        .as_ref()
+        .filter(|term| !term.trim().is_empty())
+    {
+        let escaped = term
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         params.push(Some(format!("%{escaped}%")));
         let index = params.len();
         let searchable: Vec<String> = columns
             .iter()
-            .map(|column| Ok(format!("{}::text ILIKE ${index}", quote_ident(&column.name)?)))
+            .map(|column| {
+                Ok(format!(
+                    "{}::text ILIKE ${index}",
+                    quote_ident(&column.name)?
+                ))
+            })
             .collect::<CoreResult<_>>()?;
         clauses.push(format!("({})", searchable.join(" OR ")));
     }
@@ -333,7 +354,11 @@ fn identity_predicate(
             None => clauses.push(format!("{quoted} IS NULL")),
             Some(text) => {
                 params.push(Some(text));
-                clauses.push(format!("{quoted} = ${}::{}", params.len(), column.data_type));
+                clauses.push(format!(
+                    "{quoted} = ${}::{}",
+                    params.len(),
+                    column.data_type
+                ));
             }
         }
     }
@@ -354,11 +379,7 @@ pub async fn update_cell(client: &Client, change: &RowChange) -> CoreResult<u64>
     }
 
     let mut params: Vec<Option<String>> = vec![change.value.clone()];
-    let assignment = format!(
-        "{} = $1::{}",
-        quote_ident(&target.name)?,
-        target.data_type
-    );
+    let assignment = format!("{} = $1::{}", quote_ident(&target.name)?, target.data_type);
     let predicate = identity_predicate(
         &change.identity,
         &columns,
@@ -440,10 +461,7 @@ pub async fn delete_rows(client: &Client, request: &DeleteRequest) -> CoreResult
         ));
     }
 
-    let sql = format!(
-        "DELETE FROM {relation} WHERE {}",
-        predicates.join(" OR ")
-    );
+    let sql = format!("DELETE FROM {relation} WHERE {}", predicates.join(" OR "));
     Ok(client.execute(&sql, &as_sql_params(&params)).await?)
 }
 

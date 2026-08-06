@@ -141,11 +141,7 @@ fn write_sql_copy(request: &ExportRequest) -> CoreResult<u64> {
     let file = File::create(&request.path)?;
     let mut writer = BufWriter::new(file);
 
-    writeln!(
-        writer,
-        "COPY {table} ({}) FROM stdin;",
-        columns.join(", ")
-    )?;
+    writeln!(writer, "COPY {table} ({}) FROM stdin;", columns.join(", "))?;
     for row in &request.rows {
         let fields: Vec<String> = row.iter().map(copy_field).collect();
         writeln!(writer, "{}", fields.join("\t"))?;

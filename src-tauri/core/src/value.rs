@@ -49,9 +49,9 @@ pub fn decode(ty: &Type, raw: &[u8]) -> Value {
 fn decode_scalar(ty: &Type, raw: &[u8]) -> Value {
     let decoded = match *ty {
         Type::BOOL => proto::bool_from_sql(raw).map(Value::Bool).map_err(drop),
-        Type::INT2 => proto::int2_from_sql(raw).map(|v| Value::from(v)).map_err(drop),
-        Type::INT4 => proto::int4_from_sql(raw).map(|v| Value::from(v)).map_err(drop),
-        Type::OID => proto::oid_from_sql(raw).map(|v| Value::from(v)).map_err(drop),
+        Type::INT2 => proto::int2_from_sql(raw).map(Value::from).map_err(drop),
+        Type::INT4 => proto::int4_from_sql(raw).map(Value::from).map_err(drop),
+        Type::OID => proto::oid_from_sql(raw).map(Value::from).map_err(drop),
         Type::INT8 => proto::int8_from_sql(raw).map(big_int).map_err(drop),
         Type::FLOAT4 => proto::float4_from_sql(raw)
             .map(|v| float(v as f64))
@@ -132,7 +132,8 @@ fn nest(dimensions: &[usize], flat: Vec<Value>) -> Value {
 }
 
 fn big_int(value: i64) -> Value {
-    if value.abs() <= JS_SAFE_INTEGER {
+    // `unsigned_abs`, because `i64::MIN.abs()` overflows.
+    if value.unsigned_abs() <= JS_SAFE_INTEGER as u64 {
         Value::from(value)
     } else {
         Value::String(value.to_string())
@@ -155,14 +156,16 @@ fn money(cents: i64) -> Value {
 }
 
 fn json(raw: &[u8]) -> Result<Value, ()> {
-    // jsonb values are prefixed with a one byte version header.
-    let body = match raw.first() {
-        Some(1) if raw.len() > 1 && raw[1] != b'"' => &raw[1..],
-        _ => raw,
-    };
-    serde_json::from_slice(body)
-        .or_else(|_| serde_json::from_slice(raw))
-        .map_err(drop)
+    // `jsonb` is sent as a one byte version header followed by the same text
+    // `json` uses. Strip the header first — a leading 0x01 can never start a
+    // valid JSON document, so there is no ambiguity — then fall back to the
+    // untouched bytes for plain `json`.
+    if let Some((1, rest)) = raw.split_first().map(|(first, rest)| (*first, rest)) {
+        if let Ok(value) = serde_json::from_slice(rest) {
+            return Ok(value);
+        }
+    }
+    serde_json::from_slice(raw).map_err(drop)
 }
 
 fn date(raw: &[u8]) -> Result<Value, ()> {
@@ -206,19 +209,21 @@ fn time_tz(raw: &[u8]) -> Result<Value, ()> {
 fn format_time(micros: i64) -> String {
     let total_seconds = micros.div_euclid(1_000_000);
     let fraction = micros.rem_euclid(1_000_000);
-    let base = NaiveTime::from_num_seconds_from_midnight_opt(
-        (total_seconds.rem_euclid(86_400)) as u32,
-        0,
-    )
-    .unwrap_or_default();
+    let base =
+        NaiveTime::from_num_seconds_from_midnight_opt((total_seconds.rem_euclid(86_400)) as u32, 0)
+            .unwrap_or_default();
     if fraction == 0 {
         base.format("%H:%M:%S").to_string()
     } else {
-        format!("{}.{}", base.format("%H:%M:%S"), trim_fraction(fraction))
+        format!(
+            "{}.{}",
+            base.format("%H:%M:%S"),
+            trim_fraction(fraction as u64)
+        )
     }
 }
 
-fn trim_fraction(fraction: i64) -> String {
+fn trim_fraction(fraction: u64) -> String {
     format!("{fraction:06}").trim_end_matches('0').to_string()
 }
 
@@ -236,7 +241,9 @@ fn timestamp_tz(raw: &[u8]) -> Result<Value, ()> {
         Timestamp::Infinite(text) => Ok(Value::String(text)),
         Timestamp::Value(value) => {
             let utc = DateTime::<Utc>::from_naive_utc_and_offset(value, Utc);
-            Ok(Value::String(utc.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)))
+            Ok(Value::String(
+                utc.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+            ))
         }
     }
 }
@@ -288,7 +295,7 @@ fn interval(raw: &[u8]) -> Result<Value, ()> {
     }
     if micros != 0 || parts.is_empty() {
         let negative = micros < 0;
-        let abs = micros.abs();
+        let abs = micros.unsigned_abs();
         let seconds = abs / 1_000_000;
         let fraction = abs % 1_000_000;
         let clock = format!(
@@ -322,21 +329,20 @@ fn inet(raw: &[u8]) -> Result<Value, ()> {
     let bits = raw[1];
     let length = raw[3] as usize;
     let body = raw.get(4..4 + length).ok_or(())?;
-    let address = match length {
-        4 => body
-            .iter()
-            .map(|octet| octet.to_string())
-            .collect::<Vec<_>>()
-            .join("."),
-        16 => body
-            .chunks(2)
-            .map(|pair| format!("{:x}", u16::from_be_bytes([pair[0], pair[1]])))
-            .collect::<Vec<_>>()
-            .join(":"),
+    // `Ipv4Addr`/`Ipv6Addr` render the canonical form, including `::` collapsing
+    // for IPv6, which hand-rolled joining does not.
+    let (address, full_mask) = match length {
+        4 => {
+            let octets: [u8; 4] = body.try_into().map_err(drop)?;
+            (std::net::Ipv4Addr::from(octets).to_string(), 32u8)
+        }
+        16 => {
+            let octets: [u8; 16] = body.try_into().map_err(drop)?;
+            (std::net::Ipv6Addr::from(octets).to_string(), 128u8)
+        }
         _ => return Err(()),
     };
-    let full_mask = if length == 4 { 32 } else { 128 };
-    Ok(Value::String(if bits as usize == full_mask {
+    Ok(Value::String(if bits == full_mask {
         address
     } else {
         format!("{address}/{bits}")
@@ -433,7 +439,11 @@ fn numeric(raw: &[u8]) -> Result<String, ()> {
 
 fn text_or_hex(raw: &[u8]) -> Value {
     match std::str::from_utf8(raw) {
-        Ok(text) if !text.chars().any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r') => {
+        Ok(text)
+            if !text
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r') =>
+        {
             Value::String(text.to_string())
         }
         _ => Value::String(hex_escape(raw)),
@@ -512,11 +522,13 @@ mod tests {
 
     #[test]
     fn nests_multidimensional_arrays() {
-        let flat = vec![Value::from(1), Value::from(2), Value::from(3), Value::from(4)];
-        assert_eq!(
-            nest(&[2, 2], flat),
-            serde_json::json!([[1, 2], [3, 4]])
-        );
+        let flat = vec![
+            Value::from(1),
+            Value::from(2),
+            Value::from(3),
+            Value::from(4),
+        ];
+        assert_eq!(nest(&[2, 2], flat), serde_json::json!([[1, 2], [3, 4]]));
     }
 
     #[test]
@@ -528,5 +540,49 @@ mod tests {
     #[test]
     fn binary_falls_back_to_hex() {
         assert_eq!(hex_escape(&[0xde, 0xad]), "\\xdead");
+    }
+
+    #[test]
+    fn decodes_jsonb_including_bare_scalars() {
+        // jsonb arrives as a version byte followed by the JSON text. A bare
+        // string used to be mistaken for plain json and fell back to hex.
+        let jsonb = |text: &str| {
+            let mut bytes = vec![1u8];
+            bytes.extend_from_slice(text.as_bytes());
+            bytes
+        };
+        assert_eq!(json(&jsonb(r#""hello""#)).unwrap(), Value::from("hello"));
+        assert_eq!(json(&jsonb("42")).unwrap(), Value::from(42));
+        assert_eq!(json(&jsonb("null")).unwrap(), Value::Null);
+        assert_eq!(
+            json(&jsonb(r#"{"a":1}"#)).unwrap(),
+            serde_json::json!({"a": 1})
+        );
+        // plain json has no version byte
+        assert_eq!(json(br#"{"a":1}"#).unwrap(), serde_json::json!({"a": 1}));
+        assert_eq!(json(br#""hello""#).unwrap(), Value::from("hello"));
+    }
+
+    #[test]
+    fn extreme_integers_do_not_overflow() {
+        assert_eq!(
+            big_int(i64::MIN),
+            Value::String("-9223372036854775808".into())
+        );
+        assert_eq!(
+            interval(&[0; 16]).unwrap(),
+            Value::String("00:00:00".into())
+        );
+    }
+
+    #[test]
+    fn renders_addresses_canonically() {
+        // family, netmask bits, is_cidr, address length, then the octets.
+        let v4 = [2u8, 24, 0, 4, 192, 168, 0, 1];
+        assert_eq!(inet(&v4).unwrap(), Value::String("192.168.0.1/24".into()));
+
+        let mut v6 = vec![3u8, 128, 0, 16];
+        v6.extend_from_slice(&[0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(inet(&v6).unwrap(), Value::String("2001:db8::1".into()));
     }
 }
