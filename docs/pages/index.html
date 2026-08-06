@@ -147,7 +147,15 @@ sudo apt install wishpostgres</code></pre>
       </p>
 
       <h2>Fedora, RHEL, openSUSE</h2>
-      <pre><code>sudo dnf install https://github.com/wishdevsuz/wish-pgAdmin/releases/latest/download/wishpostgres-1.0.0-1.x86_64.rpm</code></pre>
+      <pre><code>curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/install.sh | bash</code></pre>
+      <p class="note">
+        The same installer handles rpm distributions. To do it by hand, take the
+        <code>.rpm</code> from the
+        <a href="https://github.com/wishdevsuz/wish-pgAdmin/releases/latest"
+          >latest release</a
+        >
+        and run <code>sudo dnf install ./wishpostgres-&lt;version&gt;-1.x86_64.rpm</code>.
+      </p>
 
       <h2>What you need</h2>
       <table>

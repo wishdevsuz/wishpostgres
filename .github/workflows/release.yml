@@ -158,6 +158,9 @@ jobs:
           if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
             git clone --branch gh-pages --depth 1 \
               "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
+            # The clone's own .git must not become part of what is published,
+            # and it would carry the push token with it.
+            rm -rf pages/.git
           else
             mkdir -p pages
           fi
@@ -174,9 +177,19 @@ jobs:
           cp dist-release/*.deb "$pool/"
 
           cd pages/apt
+
+          # Last release's signatures would otherwise still be sitting in
+          # dists/stable while the new Release is generated, and apt-ftparchive
+          # would hash them into it — leaving apt checking a stale signature
+          # against fresh metadata.
+          rm -f dists/stable/Release dists/stable/Release.gpg dists/stable/InRelease
+
           apt-ftparchive packages pool > dists/stable/main/binary-amd64/Packages
           gzip -9fk dists/stable/main/binary-amd64/Packages
 
+          # Written aside and moved into place: redirecting straight into
+          # dists/stable/Release creates the file before the scan runs, so the
+          # Release would list itself.
           apt-ftparchive \
             -o APT::FTPArchive::Release::Origin=WishPostgres \
             -o APT::FTPArchive::Release::Label=WishPostgres \
@@ -184,7 +197,14 @@ jobs:
             -o APT::FTPArchive::Release::Codename=stable \
             -o APT::FTPArchive::Release::Architectures=amd64 \
             -o APT::FTPArchive::Release::Components=main \
-            release dists/stable > dists/stable/Release
+            -o APT::FTPArchive::Release::Description="WishPostgres releases" \
+            release dists/stable > "$RUNNER_TEMP/Release"
+          mv "$RUNNER_TEMP/Release" dists/stable/Release
+
+          echo "--- Release ---"
+          cat dists/stable/Release
+          echo "--- Packages ---"
+          grep -E '^(Package|Version|Filename):' dists/stable/main/binary-amd64/Packages
 
       - name: Sign the repository
         if: env.HAS_SIGNING_KEY == 'true'
@@ -207,10 +227,29 @@ jobs:
           # The key users add to /etc/apt/keyrings.
           gpg --export "$key" > ../wishpostgres.gpg
 
+      - name: Check the repository is usable
+        run: |
+          set -euo pipefail
+          cd pages/apt
+
+          if [ "$HAS_SIGNING_KEY" = "true" ]; then
+            # A signing step that silently produced nothing would leave apt
+            # rejecting the repository, so prove the signature verifies.
+            for file in dists/stable/Release.gpg dists/stable/InRelease ../wishpostgres.gpg; do
+              [ -s "$file" ] || { echo "::error::$file is missing or empty"; exit 1; }
+            done
+            gpg --verify dists/stable/Release.gpg dists/stable/Release
+            echo "Repository is signed and the signature verifies."
+          else
+            echo "::warning::APT_GPG_PRIVATE_KEY is not set, so the repository is \
+            unsigned. apt will refuse it unless the source is added with [trusted=yes]. \
+            Add the secret and re-run to publish a signed repository."
+          fi
+
       - name: Add the landing page and installer
         run: |
           cp scripts/install.sh pages/install.sh
-          cp docs/pages/index.html pages/index.html 2>/dev/null || true
+          cp docs/pages/index.html pages/index.html
           touch pages/.nojekyll
 
       - name: Publish to GitHub Pages
@@ -219,5 +258,10 @@ jobs:
           github_token: ${{ github.token }}
           publish_dir: pages
           publish_branch: gh-pages
-          keep_files: true
+          # False, not true: `pages` already carries the previous branch
+          # contents forward from the clone above, so what is published is
+          # exactly what was built. With keep_files a stale InRelease deleted
+          # locally would survive on the remote and apt would check the old
+          # signature against the new metadata.
+          keep_files: false
           commit_message: "apt: publish ${{ needs.build.outputs.version }}"

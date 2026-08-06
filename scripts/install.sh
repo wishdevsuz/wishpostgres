@@ -61,16 +61,35 @@ fi
 
 # ------------------------------------------------------------------ version --
 
+# `/releases/latest` redirects to the tag, and following that redirect needs no
+# API call — so it is not subject to the 60-requests-per-hour limit that anyone
+# behind a shared address (an office NAT, a university, CI) runs into. The API
+# is kept only as a fallback.
+latest_from_redirect() {
+  curl -fsSLI -o /dev/null -w '%{url_effective}' \
+    "https://github.com/$REPO/releases/latest" 2> /dev/null \
+    | sed -E 's#.*/tag/v?([^/]+)$#\1#'
+}
+
+latest_from_api() {
+  curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2> /dev/null \
+    | grep -m1 '"tag_name"' \
+    | sed -E 's/.*"tag_name" *: *"v?([^"]+)".*/\1/'
+}
+
 if [ -n "${WISHPOSTGRES_VERSION:-}" ]; then
   VERSION="${WISHPOSTGRES_VERSION#v}"
 else
   say "Looking up the latest release"
-  VERSION=$(
-    curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-      | grep -m1 '"tag_name"' \
-      | sed -E 's/.*"tag_name" *: *"v?([^"]+)".*/\1/'
-  ) || die "could not reach the GitHub release API."
-  [ -n "$VERSION" ] || die "could not work out the latest version."
+  VERSION=$(latest_from_redirect || true)
+
+  # A redirect that never reached a /tag/ URL leaves the whole URL behind.
+  case "$VERSION" in
+    "" | *[!0-9A-Za-z.+-]*) VERSION=$(latest_from_api || true) ;;
+  esac
+
+  [ -n "$VERSION" ] || die "could not work out the latest version. Check your \
+network, or pass one explicitly: WISHPOSTGRES_VERSION=1.0.0"
 fi
 
 BASE="https://github.com/$REPO/releases/download/v$VERSION"
