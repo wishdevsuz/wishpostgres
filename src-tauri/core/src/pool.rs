@@ -49,8 +49,10 @@ impl ConnectionTarget {
             .port(self.port)
             .user(&self.username)
             .dbname(&self.database)
-            .application_name("Postgres Lite")
-            .connect_timeout(Duration::from_secs(self.connect_timeout_seconds.unwrap_or(15)));
+            .application_name("WishPostgres")
+            .connect_timeout(Duration::from_secs(
+                self.connect_timeout_seconds.unwrap_or(15),
+            ));
 
         if let Some(password) = &self.password {
             config.password(password);
@@ -78,7 +80,7 @@ impl ConnectionTarget {
             }
         }
         if !options.is_empty() {
-            config.options(&options.join(" "));
+            config.options(options.join(" "));
         }
 
         Ok(config)
@@ -130,10 +132,7 @@ impl SessionManager {
 
     /// Register a connection so later calls only need its id and a database.
     pub async fn register(&self, target: ConnectionTarget) {
-        self.targets
-            .write()
-            .await
-            .insert(target.id.clone(), target);
+        self.targets.write().await.insert(target.id.clone(), target);
     }
 
     pub async fn target(&self, connection_id: &str) -> CoreResult<ConnectionTarget> {
@@ -295,7 +294,9 @@ mod tests {
 
     #[test]
     fn search_path_rejects_injection_characters() {
-        let config = target(Some("app'; DROP TABLE t; --")).build_config().unwrap();
+        let config = target(Some("app'; DROP TABLE t; --"))
+            .build_config()
+            .unwrap();
         assert_eq!(config.get_options(), Some("-c search_path=appDROPTABLEt"));
     }
 

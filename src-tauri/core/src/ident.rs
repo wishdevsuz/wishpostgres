@@ -28,8 +28,20 @@ pub fn quote_relation(schema: &str, name: &str) -> CoreResult<String> {
 
 /// Quote a string literal, used only where PostgreSQL forbids parameters
 /// (for example inside `COMMENT ON` or `SET`).
+///
+/// Backslashes are doubled and the literal is emitted as an escape string when
+/// one is present, so the result means the same thing whether or not the server
+/// has `standard_conforming_strings` turned on. Null bytes cannot appear in a
+/// PostgreSQL text value at all and are dropped rather than silently truncating
+/// the statement.
 pub fn quote_literal(raw: &str) -> String {
-    format!("'{}'", raw.replace('\'', "''"))
+    let cleaned: String = raw.chars().filter(|c| *c != '\0').collect();
+    let escaped = cleaned.replace('\'', "''");
+    if escaped.contains('\\') {
+        format!("E'{}'", escaped.replace('\\', "\\\\"))
+    } else {
+        format!("'{escaped}'")
+    }
 }
 
 /// Validate a type expression supplied by the structure editor.
@@ -42,11 +54,16 @@ pub fn validate_type_expr(raw: &str) -> CoreResult<String> {
         return Err(CoreError::Invalid("a data type is required".into()));
     }
     if trimmed.len() > 128 {
-        return Err(CoreError::Invalid("that data type expression is too long".into()));
+        return Err(CoreError::Invalid(
+            "that data type expression is too long".into(),
+        ));
     }
     let allowed = trimmed.chars().all(|c| {
         c.is_ascii_alphanumeric()
-            || matches!(c, ' ' | '_' | '(' | ')' | ',' | '[' | ']' | '.' | '"' | '\'' | '+' | '-')
+            || matches!(
+                c,
+                ' ' | '_' | '(' | ')' | ',' | '[' | ']' | '.' | '"' | '\'' | '+' | '-'
+            )
     });
     if !allowed {
         return Err(CoreError::Invalid(format!(
@@ -98,6 +115,14 @@ mod tests {
     #[test]
     fn literal_escaping() {
         assert_eq!(quote_literal("it's"), "'it''s'");
+        assert_eq!(quote_literal("plain"), "'plain'");
+        // A backslash means one thing with standard_conforming_strings on and
+        // another with it off; the explicit escape string settles it.
+        assert_eq!(
+            quote_literal("a\\'; DROP TABLE t --"),
+            "E'a\\\\''; DROP TABLE t --'"
+        );
+        assert_eq!(quote_literal("nul\0byte"), "'nulbyte'");
     }
 
     #[test]

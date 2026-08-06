@@ -3,7 +3,9 @@ use std::sync::Arc;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{ClientConfig, DigitallySignedStruct, Error as TlsError, RootCertStore, SignatureScheme};
+use rustls::{
+    ClientConfig, DigitallySignedStruct, Error as TlsError, RootCertStore, SignatureScheme,
+};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::error::{CoreError, CoreResult};
@@ -65,7 +67,12 @@ impl ServerCertVerifier for AcceptAnyCertificate {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TlsError> {
-        verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
@@ -74,7 +81,12 @@ impl ServerCertVerifier for AcceptAnyCertificate {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TlsError> {
-        verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

@@ -16,6 +16,20 @@ use crate::models::*;
 
 const PREVIEW_ROWS: usize = 50;
 const BATCH_ROWS: usize = 500;
+/// PostgreSQL's wire protocol carries the bind parameter count as an `int16`,
+/// so one statement can never have more than 65535 of them.
+const MAX_BIND_PARAMS: usize = 65_535;
+
+/// How many rows fit in one multi-row `INSERT` given a column count.
+///
+/// A wide file — 200 mapped columns — would otherwise blow past the parameter
+/// limit at the default batch size and fail the whole import.
+fn batch_rows(columns: usize) -> usize {
+    if columns == 0 {
+        return BATCH_ROWS;
+    }
+    BATCH_ROWS.min(MAX_BIND_PARAMS / columns).max(1)
+}
 
 /// A file parsed into a header plus string cells, which is all three importable
 /// formats reduced to one shape.
@@ -67,10 +81,7 @@ pub async fn run(client: &Client, request: &ImportRequest) -> CoreResult<ImportO
             .iter()
             .position(|name| name == &mapping.source)
             .ok_or_else(|| {
-                CoreError::Invalid(format!(
-                    "the file has no column named `{}`",
-                    mapping.source
-                ))
+                CoreError::Invalid(format!("the file has no column named `{}`", mapping.source))
             })?;
         targets.push((column.clone(), source));
     }
@@ -91,7 +102,9 @@ pub async fn run(client: &Client, request: &ImportRequest) -> CoreResult<ImportO
     let mut errors: Vec<String> = Vec::new();
     let null_literal = request.null_literal.as_deref();
 
-    for (chunk_index, chunk) in sheet.rows.chunks(BATCH_ROWS).enumerate() {
+    let rows_per_batch = batch_rows(targets.len());
+
+    for (chunk_index, chunk) in sheet.rows.chunks(rows_per_batch).enumerate() {
         let mut params: Vec<Option<String>> = Vec::with_capacity(chunk.len() * targets.len());
         let mut tuples: Vec<String> = Vec::with_capacity(chunk.len());
 
@@ -123,7 +136,7 @@ pub async fn run(client: &Client, request: &ImportRequest) -> CoreResult<ImportO
             Ok(count) => inserted += count,
             Err(error) => {
                 failed += chunk.len() as u64;
-                let first_row = chunk_index * BATCH_ROWS + 1;
+                let first_row = chunk_index * rows_per_batch + 1;
                 let last_row = first_row + chunk.len() - 1;
                 errors.push(format!("rows {first_row}–{last_row}: {error}"));
                 if request.stop_on_error {
@@ -180,7 +193,9 @@ fn read_csv(path: &str, has_header: bool, delimiter: Option<&str>) -> CoreResult
     let columns: Vec<String> = if has_header {
         first.iter().map(|field| field.trim().to_string()).collect()
     } else {
-        (1..=first.len()).map(|index| format!("column{index}")).collect()
+        (1..=first.len())
+            .map(|index| format!("column{index}"))
+            .collect()
     };
 
     let mut rows: Vec<Vec<Option<String>>> = Vec::new();
@@ -289,7 +304,9 @@ fn read_spreadsheet(path: &str, has_header: bool) -> CoreResult<Sheet> {
             })
             .collect()
     } else {
-        (1..=first.len()).map(|index| format!("column{index}")).collect()
+        (1..=first.len())
+            .map(|index| format!("column{index}"))
+            .collect()
     };
 
     let mut rows: Vec<Vec<Option<String>>> = Vec::new();
@@ -339,6 +356,16 @@ mod tests {
     fn formats_whole_floats_as_integers() {
         assert_eq!(format_number(42.0), "42");
         assert_eq!(format_number(42.5), "42.5");
+    }
+
+    #[test]
+    fn batches_stay_within_the_bind_parameter_limit() {
+        assert_eq!(batch_rows(4), BATCH_ROWS);
+        // 200 columns × 500 rows would be 100,000 parameters.
+        assert!(batch_rows(200) * 200 <= MAX_BIND_PARAMS);
+        assert_eq!(batch_rows(200), 327);
+        // Absurdly wide files still make progress one row at a time.
+        assert_eq!(batch_rows(70_000), 1);
     }
 
     #[test]

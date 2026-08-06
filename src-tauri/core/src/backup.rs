@@ -141,7 +141,9 @@ pub async fn dump(
 
     command.stdout(Stdio::null()).stderr(Stdio::piped());
 
-    let mut child = command.spawn().map_err(|error| missing_binary(&binary, error))?;
+    let mut child = command
+        .spawn()
+        .map_err(|error| missing_binary(&binary, error))?;
     let stderr = child
         .stderr
         .take()
@@ -159,7 +161,9 @@ pub async fn dump(
     let mut warnings: Vec<String> = Vec::new();
     let mut tables_done = 0u64;
 
-    while let Some(line) = lines.next_line().await? {
+    // A read error must not abandon the child: returning early here would leave
+    // pg_dump running and unreaped. Stop reading, then still wait on it below.
+    while let Ok(Some(line)) = lines.next_line().await {
         if let Some(table) = line.split("dumping contents of table ").nth(1) {
             tables_done += 1;
             report(TransferProgress {
@@ -242,7 +246,9 @@ pub async fn restore(
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
 
-    let mut child = command.spawn().map_err(|error| missing_binary(&binary, error))?;
+    let mut child = command
+        .spawn()
+        .map_err(|error| missing_binary(&binary, error))?;
     let mut stdin = child
         .stdin
         .take()
@@ -270,8 +276,18 @@ pub async fn restore(
     let mut written = 0u64;
     let mut last_reported = 0u64;
 
+    let mut read_error: Option<std::io::Error> = None;
+
     loop {
-        let read = file.read(&mut buffer).await?;
+        // As in `dump`, a failure here breaks out so the child is still waited
+        // on rather than left running with its stdin half written.
+        let read = match file.read(&mut buffer).await {
+            Ok(read) => read,
+            Err(error) => {
+                read_error = Some(error);
+                break;
+            }
+        };
         if read == 0 {
             break;
         }
@@ -303,6 +319,10 @@ pub async fn restore(
         .filter(|line| is_problem(line))
         .map(clean_line)
         .collect();
+
+    if let Some(error) = read_error {
+        return Err(CoreError::Io(error));
+    }
 
     if !status.success() {
         return Err(CoreError::Invalid(if messages.is_empty() {

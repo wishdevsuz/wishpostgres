@@ -1,4 +1,4 @@
-//! Core PostgreSQL engine for Postgres Lite.
+//! Core PostgreSQL engine for WishPostgres.
 //!
 //! This crate is deliberately free of any GUI or Tauri dependency so that the
 //! database layer can be compiled and tested on its own.
