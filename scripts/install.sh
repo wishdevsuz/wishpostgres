@@ -198,21 +198,24 @@ case "$METHOD" in
     mkdir -p "$PREFIX"
     install -m755 "$WORK/$PACKAGE" "$PREFIX/wishpostgres"
 
-    # Lift the icon out of the AppImage, or the launcher entry below would point
-    # at an icon name nothing on the system provides. Best effort: a failure
+    # Lift the icons out of the AppImage, or the launcher entry below would
+    # point at an icon name nothing on the system provides. The whole hicolor
+    # tree is copied rather than one file, so each size lands in the directory
+    # that describes it — exactly what the .deb installs. Best effort: a failure
     # here costs an icon, not the installation.
-    icon="$HOME/.local/share/icons/hicolor/256x256/apps/wishpostgres.png"
     (
       cd "$WORK" && chmod +x "$PACKAGE" \
-        && ./"$PACKAGE" --appimage-extract 'wishpostgres.png' > /dev/null 2>&1
+        && ./"$PACKAGE" --appimage-extract 'usr/share/icons/*' > /dev/null 2>&1
     ) || true
-    extracted=$(find "$WORK/squashfs-root" -name 'wishpostgres.png' 2> /dev/null | head -1)
-    if [ -n "$extracted" ]; then
-      install -Dm644 "$extracted" "$icon"
+
+    theme="$WORK/squashfs-root/usr/share/icons/hicolor"
+    if [ -d "$theme" ]; then
+      mkdir -p "$HOME/.local/share/icons/hicolor"
+      cp -r "$theme/." "$HOME/.local/share/icons/hicolor/"
       command -v gtk-update-icon-cache > /dev/null 2>&1 \
         && gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2> /dev/null || true
     else
-      warn "could not read the icon out of the AppImage; the launcher entry will have none."
+      warn "could not read the icons out of the AppImage; the launcher entry will have none."
     fi
 
     # A desktop entry, so it shows up in the launcher like a real application.
