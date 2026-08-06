@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 
 import { AddColumnDialog } from '@/components/dialogs/AddColumnDialog';
@@ -10,8 +10,10 @@ import { GlobalSearchDialog } from '@/components/dialogs/GlobalSearchDialog';
 import { SettingsDialog } from '@/components/dialogs/SettingsDialog';
 import { ShortcutsDialog } from '@/components/dialogs/ShortcutsDialog';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { SplashScreen, type BootStage } from '@/components/layout/SplashScreen';
 import { TopBar } from '@/components/layout/TopBar';
 import { TooltipProvider } from '@/components/ui/misc';
+import { useScopeReset } from '@/hooks/use-scope-sync';
 import { useShortcuts } from '@/hooks/use-shortcuts';
 import { CatalogRoutes } from '@/pages/CatalogRoutes';
 import { useConnectionStore } from '@/state/connection-store';
@@ -41,12 +43,16 @@ export default function App() {
 }
 
 function Shell() {
-  useBootstrap();
+  const boot = useBootstrap();
   useGlobalShortcuts();
   usePersistence();
+  useScopeReset();
 
   return (
     <div className="flex h-full flex-col bg-canvas text-ink">
+      {boot.visible && (
+        <SplashScreen stage={boot.stage} detail={boot.detail} leaving={boot.stage === 'ready'} />
+      )}
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
@@ -86,45 +92,73 @@ function Shell() {
   );
 }
 
-/** Load persisted state and, when asked, re-open the last connection. */
+/**
+ * Load persisted state and, when asked, re-open the last connection, reporting
+ * each step so the splash screen can narrate what is happening.
+ */
 function useBootstrap() {
   const loadSettings = useSettingsStore((state) => state.load);
   const hydrate = useWorkspaceStore((state) => state.hydrate);
   const refresh = useConnectionStore((state) => state.refresh);
   const connect = useConnectionStore((state) => state.connect);
-  const editConnection = useDialogStore((state) => state.editConnection);
+
+  const [stage, setStage] = useState<BootStage>('settings');
+  const [detail, setDetail] = useState<string | undefined>(undefined);
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      const [settings, workspace, list] = await Promise.all([
-        loadSettings().then(() => useSettingsStore.getState().settings),
-        hydrate(),
-        refresh(),
-      ]);
-      if (cancelled) return;
+      try {
+        setStage('settings');
+        await loadSettings();
+        if (cancelled) return;
 
-      if (list.length === 0) {
-        // A brand new install lands straight on the welcome screen.
-        return;
-      }
+        setStage('workspace');
+        const workspace = await hydrate();
+        if (cancelled) return;
 
-      const target = workspace.lastConnectionId
-        ? list.find((entry) => entry.id === workspace.lastConnectionId)
-        : undefined;
+        setStage('connections');
+        const list = await refresh();
+        if (cancelled) return;
 
-      if (settings.openLastConnection && target) {
-        await connect(target.id, workspace.lastDatabase ?? undefined).catch((error) =>
-          notify.failure(error, `Could not reopen ${target.name}`),
-        );
+        const settings = useSettingsStore.getState().settings;
+        const target = workspace.lastConnectionId
+          ? list.find((entry) => entry.id === workspace.lastConnectionId)
+          : undefined;
+
+        if (settings.openLastConnection && target) {
+          setStage('connecting');
+          setDetail(`Connecting to ${target.name}`);
+          // Reconnecting can be slow or hang on an unreachable host, so it is
+          // never allowed to hold the splash open. The sidebar shows the live
+          // status once the window is interactive.
+          const attempt = connect(target.id, workspace.lastDatabase ?? undefined).catch((error) =>
+            notify.failure(error, `Could not reopen ${target.name}`),
+          );
+          await Promise.race([attempt, delay(1200)]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDetail(undefined);
+          setStage('ready');
+          // Let the fade finish before the overlay leaves the tree.
+          setTimeout(() => setVisible(false), 320);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [connect, editConnection, hydrate, loadSettings, refresh]);
+  }, [connect, hydrate, loadSettings, refresh]);
+
+  return { stage, detail, visible };
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 /** Save the workspace whenever anything the user would miss changes. */
@@ -142,7 +176,17 @@ function usePersistence() {
   useEffect(() => {
     if (!hydrated) return;
     persist(connectionId, database);
-  }, [persist, hydrated, tabs, activeTabId, favorites, schema, sidebarWidth, connectionId, database]);
+  }, [
+    persist,
+    hydrated,
+    tabs,
+    activeTabId,
+    favorites,
+    schema,
+    sidebarWidth,
+    connectionId,
+    database,
+  ]);
 }
 
 function useGlobalShortcuts() {

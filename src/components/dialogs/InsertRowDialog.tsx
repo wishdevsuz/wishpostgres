@@ -2,8 +2,22 @@ import { Plus, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
-import { Checkbox, Field, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
+import {
+  Checkbox,
+  Field,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/form';
 import { Input, Textarea } from '@/components/ui/input';
 import { Badge, Tooltip } from '@/components/ui/misc';
 import { useScope } from '@/hooks/use-catalog';
@@ -110,13 +124,17 @@ export function InsertRowDialog({
               <div key={column.name} className="grid grid-cols-[190px_1fr] items-start gap-3">
                 <div className="pt-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[12.5px] font-medium text-ink">{column.name}</span>
+                    <span className="truncate text-[12.5px] font-medium text-ink">
+                      {column.name}
+                    </span>
                     {column.isPrimaryKey && <Badge variant="caution">PK</Badge>}
                     {!column.nullable && !column.isIdentity && column.default === null && (
                       <span className="text-negative">*</span>
                     )}
                   </div>
-                  <p className="truncate font-mono text-[10.5px] text-ink-faint">{column.dataType}</p>
+                  <p className="truncate font-mono text-[10.5px] text-ink-faint">
+                    {column.dataType}
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -124,7 +142,9 @@ export function InsertRowDialog({
                     column={column}
                     state={state}
                     disabled={disabled}
-                    onChange={(value) => update(column.name, { value, isNull: false, useDefault: false })}
+                    onChange={(value) =>
+                      update(column.name, { value, isNull: false, useDefault: false })
+                    }
                   />
 
                   <div className="flex flex-wrap items-center gap-3">
@@ -132,7 +152,9 @@ export function InsertRowDialog({
                       <Toggle
                         id={`${column.name}-default`}
                         checked={state.useDefault}
-                        onChange={(checked) => update(column.name, { useDefault: checked, isNull: false })}
+                        onChange={(checked) =>
+                          update(column.name, { useDefault: checked, isNull: false })
+                        }
                         label={
                           <span className="flex items-center gap-1">
                             <Wand2 className="size-3" />
@@ -152,7 +174,9 @@ export function InsertRowDialog({
                       <Toggle
                         id={`${column.name}-null`}
                         checked={state.isNull}
-                        onChange={(checked) => update(column.name, { isNull: checked, useDefault: false })}
+                        onChange={(checked) =>
+                          update(column.name, { isNull: checked, useDefault: false })
+                        }
                         label="NULL"
                       />
                     )}
@@ -170,7 +194,12 @@ export function InsertRowDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={hasErrors} loading={busy} onClick={() => void submit()}>
+          <Button
+            variant="primary"
+            disabled={hasErrors}
+            loading={busy}
+            onClick={() => void submit()}
+          >
             Insert row
           </Button>
         </DialogFooter>
@@ -191,7 +220,10 @@ function Toggle({
   label: React.ReactNode;
 }) {
   return (
-    <label htmlFor={id} className="flex select-none items-center gap-1.5 text-[11.5px] text-ink-muted">
+    <label
+      htmlFor={id}
+      className="flex select-none items-center gap-1.5 text-[11.5px] text-ink-muted"
+    >
       <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
       {label}
     </label>

@@ -99,7 +99,12 @@ export function TreeItem({
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
       >
         {icon && (
-          <span className={cn('flex shrink-0 [&_svg]:size-3.5', active ? 'text-accent' : 'text-ink-faint')}>
+          <span
+            className={cn(
+              'flex shrink-0 [&_svg]:size-3.5',
+              active ? 'text-accent' : 'text-ink-faint',
+            )}
+          >
             {icon}
           </span>
         )}

@@ -1,7 +1,13 @@
 import { Copy, Lightbulb, OctagonAlert, Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/misc';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { useDialogStore } from '@/state/dialog-store';
@@ -93,7 +99,9 @@ function Panel({
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted">
+        {label}
+      </p>
       <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-line bg-canvas p-2.5 font-mono text-[11.5px] leading-relaxed text-ink-soft">
         {value}
       </pre>

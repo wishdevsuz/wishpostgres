@@ -1,4 +1,9 @@
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+} from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { PostgreSQL, sql, type SQLNamespace } from '@codemirror/lang-sql';
 import {
@@ -32,7 +37,11 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.number, color: '#ffd166' },
   { tag: tags.bool, color: '#ffd166' },
   { tag: tags.null, color: '#ffd166' },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment], color: '#5c6573', fontStyle: 'italic' },
+  {
+    tag: [tags.comment, tags.lineComment, tags.blockComment],
+    color: '#5c6573',
+    fontStyle: 'italic',
+  },
   { tag: tags.typeName, color: '#5ea8ff' },
   { tag: tags.variableName, color: '#e7eaf0' },
   { tag: [tags.propertyName, tags.attributeName], color: '#7fd1e6' },
@@ -68,7 +77,14 @@ export interface SqlEditorProps {
   autoFocus?: boolean;
 }
 
-export function SqlEditor({ value, onChange, completions, onRun, onRunAll, autoFocus }: SqlEditorProps) {
+export function SqlEditor({
+  value,
+  onChange,
+  completions,
+  onRun,
+  onRunAll,
+  autoFocus,
+}: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const callbacks = useRef({ onChange, onRun, onRunAll });

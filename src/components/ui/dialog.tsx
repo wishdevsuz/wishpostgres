@@ -35,32 +35,33 @@ const SIZES = {
   xl: 'max-w-[1000px]',
 } as const;
 
-export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
-  ({ className, children, size = 'md', hideClose, ...props }, ref) => (
-    <DialogPrimitive.Portal>
-      <DialogOverlay />
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn(
-          'fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line-strong bg-elevated shadow-[var(--shadow-pop)] data-[state=open]:[animation:pop-in_160ms_var(--ease-out-soft)]',
-          SIZES[size],
-          className,
-        )}
-        {...props}
-      >
-        {children}
-        {!hideClose && (
-          <DialogPrimitive.Close
-            aria-label="Close"
-            className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-[#ffffff0f] hover:text-ink"
-          >
-            <X className="size-4" />
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
-  ),
-);
+export const DialogContent = forwardRef<
+  ElementRef<typeof DialogPrimitive.Content>,
+  DialogContentProps
+>(({ className, children, size = 'md', hideClose, ...props }, ref) => (
+  <DialogPrimitive.Portal>
+    <DialogOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        'fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[92vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-line-strong bg-elevated shadow-[var(--shadow-pop)] data-[state=open]:[animation:pop-in_160ms_var(--ease-out-soft)]',
+        SIZES[size],
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      {!hideClose && (
+        <DialogPrimitive.Close
+          aria-label="Close"
+          className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-[#ffffff0f] hover:text-ink"
+        >
+          <X className="size-4" />
+        </DialogPrimitive.Close>
+      )}
+    </DialogPrimitive.Content>
+  </DialogPrimitive.Portal>
+));
 DialogContent.displayName = 'DialogContent';
 
 export function DialogHeader({
@@ -96,7 +97,9 @@ export function DialogHeader({
 }
 
 export function DialogBody({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('min-h-0 flex-1 overflow-y-auto px-5 py-4', className)}>{children}</div>;
+  return (
+    <div className={cn('min-h-0 flex-1 overflow-y-auto px-5 py-4', className)}>{children}</div>
+  );
 }
 
 export function DialogFooter({ className, children }: { className?: string; children: ReactNode }) {

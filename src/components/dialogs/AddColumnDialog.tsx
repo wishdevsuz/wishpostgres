@@ -3,8 +3,22 @@ import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
-import { CheckboxField, Field, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
+import {
+  CheckboxField,
+  Field,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useScope } from '@/hooks/use-catalog';
 import { structure } from '@/services/api';
@@ -131,7 +145,10 @@ export function AddColumnDialog({
           </Field>
 
           {preset === CUSTOM && (
-            <Field label="Custom type" hint="Any type expression PostgreSQL accepts, including domains and enums.">
+            <Field
+              label="Custom type"
+              hint="Any type expression PostgreSQL accepts, including domains and enums."
+            >
               <Input
                 value={customType}
                 spellCheck={false}

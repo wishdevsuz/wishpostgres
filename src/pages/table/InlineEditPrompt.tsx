@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { Field } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import type { ColumnMeta } from '@/types';
@@ -34,7 +40,7 @@ const COPY: Record<
     title: 'Set default',
     label: 'Default expression',
     hint: 'Leave empty to drop the default. Existing rows are not changed.',
-    placeholder: "now()",
+    placeholder: 'now()',
   },
   comment: {
     title: 'Set comment',
@@ -76,7 +82,8 @@ export function InlineEditPrompt({
 
   function submit() {
     if (kind === 'rename') onSubmit({ type: 'rename', value });
-    else if (kind === 'type') onSubmit({ type: 'changeType', value: { dataType: value, using: null } });
+    else if (kind === 'type')
+      onSubmit({ type: 'changeType', value: { dataType: value, using: null } });
     else if (kind === 'default') onSubmit({ type: 'setDefault', value: value.trim() || null });
     else onSubmit({ type: 'setComment', value: value.trim() || null });
   }
@@ -84,7 +91,10 @@ export function InlineEditPrompt({
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent size="sm">
-        <DialogHeader title={copy.title} description={`${pending.column.name} · ${pending.column.dataType}`} />
+        <DialogHeader
+          title={copy.title}
+          description={`${pending.column.name} · ${pending.column.dataType}`}
+        />
         <DialogBody>
           <Field label={copy.label} hint={copy.hint}>
             <Input

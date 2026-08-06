@@ -68,7 +68,15 @@ export function BrowseTab({ target }: { target: TableTarget }) {
   }, [connectionId, database, queryClient]);
 
   const editCell = useMutation({
-    mutationFn: async ({ row, column, value }: { row: number; column: number; value: string | null }) => {
+    mutationFn: async ({
+      row,
+      column,
+      value,
+    }: {
+      row: number;
+      column: number;
+      value: string | null;
+    }) => {
       if (!result) return;
       const columnMeta = result.columns[column];
       const identityValues = result.identityValues[row];
@@ -119,6 +127,15 @@ export function BrowseTab({ target }: { target: TableTarget }) {
     onError: (error) => notify.failure(error, 'Could not delete the rows'),
   });
 
+  // A stable identity here is what lets the grid's memoised rows skip
+  // re-rendering while scrolling.
+  const applyEdit = useCallback(
+    async (row: number, column: number, value: string | null) => {
+      await editCell.mutateAsync({ row, column, value });
+    },
+    [editCell],
+  );
+
   const toggleSort = useCallback((column: string, additive: boolean) => {
     setPage(0);
     setSort((current) => {
@@ -131,7 +148,13 @@ export function BrowseTab({ target }: { target: TableTarget }) {
   }, []);
 
   if (!ready) {
-    return <EmptyState icon={<Table2 />} title="Not connected" description="Connect to browse this table." />;
+    return (
+      <EmptyState
+        icon={<Table2 />}
+        title="Not connected"
+        description="Connect to browse this table."
+      />
+    );
   }
 
   if (browse.isError) {
@@ -215,13 +238,7 @@ export function BrowseTab({ target }: { target: TableTarget }) {
         hiddenColumns={hiddenColumns}
         selectedRows={selectedRows}
         onSelectedRowsChange={setSelectedRows}
-        onEditCell={
-          result?.editable
-            ? async (row, column, value) => {
-                await editCell.mutateAsync({ row, column, value });
-              }
-            : undefined
-        }
+        onEditCell={result?.editable ? applyEdit : undefined}
         onDeleteSelected={result?.editable ? () => setDialog('delete') : undefined}
         emptyState={
           <EmptyState

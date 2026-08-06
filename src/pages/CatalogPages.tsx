@@ -59,7 +59,10 @@ export function FunctionsPage() {
   const list = useMemo(
     () =>
       (functions.data ?? []).filter(
-        (entry) => !term || entry.name.toLowerCase().includes(term) || entry.arguments.toLowerCase().includes(term),
+        (entry) =>
+          !term ||
+          entry.name.toLowerCase().includes(term) ||
+          entry.arguments.toLowerCase().includes(term),
       ),
     [functions.data, term],
   );
@@ -77,10 +80,15 @@ export function FunctionsPage() {
       ) : (
         <ul className="divide-y divide-line">
           {list.map((entry) => (
-            <li key={`${entry.name}-${entry.arguments}`} className="group/row px-3 py-2 hover:bg-[#ffffff05]">
+            <li
+              key={`${entry.name}-${entry.arguments}`}
+              className="group/row px-3 py-2 hover:bg-[#ffffff05]"
+            >
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[12.5px] font-medium text-ink">{entry.name}</span>
-                <Badge variant={entry.kind === 'procedure' ? 'violet' : 'accent'}>{entry.kind}</Badge>
+                <Badge variant={entry.kind === 'procedure' ? 'violet' : 'accent'}>
+                  {entry.kind}
+                </Badge>
                 <Badge variant="neutral">{entry.language}</Badge>
                 <div className="flex-1" />
                 <Tooltip content="Copy call signature">
@@ -89,14 +97,21 @@ export function FunctionsPage() {
                     size="iconXs"
                     aria-label="Copy signature"
                     className="opacity-0 group-hover/row:opacity-100"
-                    onClick={() => void copy(`${entry.schema}.${entry.name}(${entry.arguments})`, 'Signature copied')}
+                    onClick={() =>
+                      void copy(
+                        `${entry.schema}.${entry.name}(${entry.arguments})`,
+                        'Signature copied',
+                      )
+                    }
                   >
                     <Copy />
                   </Button>
                 </Tooltip>
               </div>
               <p className="truncate font-mono text-[11.5px] text-ink-muted">({entry.arguments})</p>
-              <p className="truncate font-mono text-[11.5px] text-ink-faint">returns {entry.returns}</p>
+              <p className="truncate font-mono text-[11.5px] text-ink-faint">
+                returns {entry.returns}
+              </p>
             </li>
           ))}
         </ul>
@@ -113,7 +128,10 @@ export function ExtensionsPage() {
   const list = useMemo(
     () =>
       (extensions.data ?? []).filter(
-        (entry) => !term || entry.name.toLowerCase().includes(term) || (entry.comment ?? '').toLowerCase().includes(term),
+        (entry) =>
+          !term ||
+          entry.name.toLowerCase().includes(term) ||
+          (entry.comment ?? '').toLowerCase().includes(term),
       ),
     [extensions.data, term],
   );
@@ -155,7 +173,14 @@ export function ExtensionsPage() {
 function ExtensionRow({
   entry,
 }: {
-  entry: { name: string; comment: string | null; installedVersion: string | null; defaultVersion: string | null; schema: string | null; installed: boolean };
+  entry: {
+    name: string;
+    comment: string | null;
+    installedVersion: string | null;
+    defaultVersion: string | null;
+    schema: string | null;
+    installed: boolean;
+  };
 }) {
   return (
     <li className="px-3 py-2">
@@ -173,7 +198,9 @@ function ExtensionRow({
             <Badge variant="caution">update to {entry.defaultVersion}</Badge>
           )}
       </div>
-      {entry.comment && <p className="text-[11.5px] leading-snug text-ink-muted">{entry.comment}</p>}
+      {entry.comment && (
+        <p className="text-[11.5px] leading-snug text-ink-muted">{entry.comment}</p>
+      )}
     </li>
   );
 }
@@ -234,7 +261,10 @@ export function HistoryPage() {
       ) : (
         <ul className="divide-y divide-line">
           {list.map((entry) => (
-            <li key={entry.id} className="group/row flex items-start gap-3 px-3 py-2 hover:bg-[#ffffff05]">
+            <li
+              key={entry.id}
+              className="group/row flex items-start gap-3 px-3 py-2 hover:bg-[#ffffff05]"
+            >
               <span
                 className={
                   entry.success
@@ -243,7 +273,9 @@ export function HistoryPage() {
                 }
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-mono text-[12px] text-ink-soft">{summariseSql(entry.sql, 160)}</p>
+                <p className="truncate font-mono text-[12px] text-ink-soft">
+                  {summariseSql(entry.sql, 160)}
+                </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-faint">
                   <span>{formatRelativeTime(entry.executedAt)}</span>
                   <span>·</span>
@@ -252,11 +284,18 @@ export function HistoryPage() {
                   </span>
                   <span>·</span>
                   <span>{formatDuration(entry.durationMs)}</span>
-                  {entry.errorMessage && <span className="truncate text-negative">{entry.errorMessage}</span>}
+                  {entry.errorMessage && (
+                    <span className="truncate text-negative">{entry.errorMessage}</span>
+                  )}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover/row:opacity-100">
-                <Button variant="ghost" size="iconXs" aria-label="Copy" onClick={() => void copy(entry.sql)}>
+                <Button
+                  variant="ghost"
+                  size="iconXs"
+                  aria-label="Copy"
+                  onClick={() => void copy(entry.sql)}
+                >
                   <Copy />
                 </Button>
                 <Button

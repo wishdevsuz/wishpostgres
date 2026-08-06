@@ -100,7 +100,11 @@ export const ContextMenuItem = forwardRef<
   ElementRef<typeof ContextMenuPrimitive.Item>,
   ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> & { danger?: boolean }
 >(({ className, danger, ...props }, ref) => (
-  <ContextMenuPrimitive.Item ref={ref} className={cn(item, danger && dangerItem, className)} {...props} />
+  <ContextMenuPrimitive.Item
+    ref={ref}
+    className={cn(item, danger && dangerItem, className)}
+    {...props}
+  />
 ));
 ContextMenuItem.displayName = 'ContextMenuItem';
 

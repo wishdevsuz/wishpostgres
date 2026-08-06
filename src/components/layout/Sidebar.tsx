@@ -46,7 +46,10 @@ export function Sidebar() {
       style={{ width }}
     >
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 py-2">
-        <ConnectionList open={connectionsOpen} onToggle={() => setConnectionsOpen((open) => !open)} />
+        <ConnectionList
+          open={connectionsOpen}
+          onToggle={() => setConnectionsOpen((open) => !open)}
+        />
         <FavoritesSection open={favoritesOpen} onToggle={() => setFavoritesOpen((open) => !open)} />
         <ObjectTree />
       </div>
@@ -81,7 +84,13 @@ function FavoritesSection({ open, onToggle }: { open: boolean; onToggle: () => v
   if (scoped.length === 0) return null;
 
   return (
-    <TreeSection label="Favorites" icon={<Star />} open={open} onToggle={onToggle} count={scoped.length}>
+    <TreeSection
+      label="Favorites"
+      icon={<Star />}
+      open={open}
+      onToggle={onToggle}
+      count={scoped.length}
+    >
       {scoped.map((favorite) => (
         <TreeItem
           key={`${favorite.schema}.${favorite.table}`}
@@ -89,7 +98,9 @@ function FavoritesSection({ open, onToggle }: { open: boolean; onToggle: () => v
           icon={<Table2 />}
           label={favorite.table}
           meta={favorite.schema}
-          onClick={() => openTable({ schema: favorite.schema, table: favorite.table, kind: 'table' })}
+          onClick={() =>
+            openTable({ schema: favorite.schema, table: favorite.table, kind: 'table' })
+          }
           actions={
             <button
               type="button"

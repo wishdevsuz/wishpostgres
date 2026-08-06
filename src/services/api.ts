@@ -63,7 +63,8 @@ export const catalog = {
   schemas: (scope: Scope) => call<SchemaInfo[]>('list_schemas', { ...scope }),
   relations: (scope: Scope & { schema: string; kinds: RelationKind[] }) =>
     call<RelationInfo[]>('list_relations', { ...scope }),
-  functions: (scope: Scope & { schema: string }) => call<FunctionInfo[]>('list_functions', { ...scope }),
+  functions: (scope: Scope & { schema: string }) =>
+    call<FunctionInfo[]>('list_functions', { ...scope }),
   extensions: (scope: Scope) => call<ExtensionInfo[]>('list_extensions', { ...scope }),
   columns: (scope: TableScope) => call<ColumnMeta[]>('table_columns', { ...scope }),
   indexes: (scope: TableScope) => call<IndexInfo[]>('table_indexes', { ...scope }),
@@ -74,10 +75,13 @@ export const catalog = {
 };
 
 export const data = {
-  browse: (scope: Scope & { request: BrowseRequest }) => call<BrowseResult>('browse_table', { ...scope }),
+  browse: (scope: Scope & { request: BrowseRequest }) =>
+    call<BrowseResult>('browse_table', { ...scope }),
   updateCell: (scope: Scope & { change: RowChange }) => call<number>('update_cell', { ...scope }),
-  insertRow: (scope: Scope & { request: InsertRequest }) => call<number>('insert_row', { ...scope }),
-  deleteRows: (scope: Scope & { request: DeleteRequest }) => call<number>('delete_rows', { ...scope }),
+  insertRow: (scope: Scope & { request: InsertRequest }) =>
+    call<number>('insert_row', { ...scope }),
+  deleteRows: (scope: Scope & { request: DeleteRequest }) =>
+    call<number>('delete_rows', { ...scope }),
 };
 
 export const structure = {
@@ -105,21 +109,24 @@ export const structure = {
       };
     },
   ) => call<string>('alter_column', { ...scope }),
-  renameRelation: (scope: TableScope & { newName: string }) => call<string>('rename_relation', { ...scope }),
+  renameRelation: (scope: TableScope & { newName: string }) =>
+    call<string>('rename_relation', { ...scope }),
   truncate: (scope: TableScope) => call<string>('truncate_table', { ...scope }),
   drop: (scope: TableScope & { cascade: boolean }) => call<string>('drop_relation', { ...scope }),
 };
 
 export const sql = {
   run: (scope: Scope & { sql: string }) => call<QueryResult[]>('run_sql', { ...scope }),
-  explain: (scope: Scope & { sql: string; analyze: boolean }) => call<string>('explain_sql', { ...scope }),
+  explain: (scope: Scope & { sql: string; analyze: boolean }) =>
+    call<string>('explain_sql', { ...scope }),
 };
 
 export const transfer = {
   exportRows: (request: ExportRequest) => call<number>('export_rows', { request }),
   previewImport: (path: string, hasHeader: boolean, delimiter: string | null) =>
     call<ImportPreview>('preview_import', { path, hasHeader, delimiter }),
-  importRows: (scope: Scope & { request: ImportRequest }) => call<ImportOutcome>('import_rows', { ...scope }),
+  importRows: (scope: Scope & { request: ImportRequest }) =>
+    call<ImportOutcome>('import_rows', { ...scope }),
   backup: (scope: { connectionId: string; request: BackupRequest; token: string }) =>
     call<TransferOutcome>('backup_database', { ...scope }),
   restore: (scope: { connectionId: string; request: RestoreRequest; token: string }) =>

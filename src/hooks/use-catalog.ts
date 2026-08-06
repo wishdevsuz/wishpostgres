@@ -16,10 +16,15 @@ export function useScope() {
 
 const STALE = 30_000;
 
+/**
+ * The database list belongs to the server, not to whichever database happens to
+ * be open, so it is keyed on the connection alone. Switching database therefore
+ * leaves the list on screen instead of flashing a skeleton.
+ */
 export function useDatabases() {
   const { connectionId, database, ready } = useScope();
   return useQuery({
-    queryKey: ['databases', connectionId, database],
+    queryKey: ['databases', connectionId],
     queryFn: () => catalog.databases({ connectionId: connectionId!, database: database! }),
     enabled: ready,
     staleTime: STALE,

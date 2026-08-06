@@ -71,7 +71,12 @@ export function QueryPage() {
 
   useShortcuts(
     [
-      { key: 'l', ctrl: true, allowInFields: true, handler: () => tab && updateTab(tab.id, { sql: '' }) },
+      {
+        key: 'l',
+        ctrl: true,
+        allowInFields: true,
+        handler: () => tab && updateTab(tab.id, { sql: '' }),
+      },
       { key: 'w', ctrl: true, allowInFields: true, handler: () => tab && closeTab(tab.id) },
       { key: 't', ctrl: true, allowInFields: true, handler: () => addTab() },
     ],
@@ -94,8 +99,14 @@ export function QueryPage() {
                   : 'text-ink-muted hover:bg-[#ffffff06] hover:text-ink-soft',
               )}
             >
-              {entry.id === tab.id && <span className="absolute inset-x-0 top-0 h-[2px] bg-accent" />}
-              <button type="button" onClick={() => setActiveTab(entry.id)} className="max-w-[160px] truncate">
+              {entry.id === tab.id && (
+                <span className="absolute inset-x-0 top-0 h-[2px] bg-accent" />
+              )}
+              <button
+                type="button"
+                onClick={() => setActiveTab(entry.id)}
+                className="max-w-[160px] truncate"
+              >
                 {entry.name}
               </button>
               <button
@@ -148,7 +159,12 @@ export function QueryPage() {
             onClick={async () => {
               if (!connectionId || !database) return;
               try {
-                const plan = await sqlApi.explain({ connectionId, database, sql: tab.sql, analyze: false });
+                const plan = await sqlApi.explain({
+                  connectionId,
+                  database,
+                  sql: tab.sql,
+                  analyze: false,
+                });
                 setResults([
                   {
                     columns: [{ name: 'QUERY PLAN', dataType: 'text', typeCategory: 'text' }],
@@ -174,7 +190,12 @@ export function QueryPage() {
         <Separator orientation="vertical" className="h-5" />
 
         <Tooltip content="Clear the editor" shortcut="Ctrl L">
-          <Button variant="ghost" size="iconSm" aria-label="Clear" onClick={() => updateTab(tab.id, { sql: '' })}>
+          <Button
+            variant="ghost"
+            size="iconSm"
+            aria-label="Clear"
+            onClick={() => updateTab(tab.id, { sql: '' })}
+          >
             <Eraser />
           </Button>
         </Tooltip>

@@ -3,7 +3,13 @@ import { Database, KeyRound, RotateCcw, Settings2 } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { Field, Switch } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Badge, Separator } from '@/components/ui/misc';
@@ -88,7 +94,9 @@ export function SettingsDialog() {
                   min={5}
                   max={3600}
                   value={settings.queryTimeoutSeconds}
-                  onChange={(event) => update('queryTimeoutSeconds', Number(event.target.value) || 60)}
+                  onChange={(event) =>
+                    update('queryTimeoutSeconds', Number(event.target.value) || 60)
+                  }
                 />
               </Field>
               <Field label="Interface size (px)">
@@ -119,7 +127,9 @@ export function SettingsDialog() {
                   type="number"
                   min={0}
                   value={settings.statementTimeoutMs}
-                  onChange={(event) => update('statementTimeoutMs', Number(event.target.value) || 0)}
+                  onChange={(event) =>
+                    update('statementTimeoutMs', Number(event.target.value) || 0)
+                  }
                 />
               </Field>
             </div>
@@ -140,7 +150,9 @@ export function SettingsDialog() {
                 min={10}
                 max={100000}
                 value={settings.maxHistoryEntries}
-                onChange={(event) => update('maxHistoryEntries', Number(event.target.value) || 1000)}
+                onChange={(event) =>
+                  update('maxHistoryEntries', Number(event.target.value) || 1000)
+                }
               />
             </Field>
           </Section>
@@ -165,7 +177,9 @@ export function SettingsDialog() {
                       <Badge variant="caution" size="md">
                         Encrypted file
                       </Badge>
-                      <span className="text-ink-faint">No keyring was reachable on this session.</span>
+                      <span className="text-ink-faint">
+                        No keyring was reachable on this session.
+                      </span>
                     </span>
                   )
                 ) : (

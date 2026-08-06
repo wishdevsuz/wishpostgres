@@ -25,7 +25,11 @@ export function SavePanel({
   const term = useDebounced(search, 200).trim().toLowerCase();
 
   const history = useQuery({ queryKey: ['history'], queryFn: prefs.history, staleTime: 5_000 });
-  const saved = useQuery({ queryKey: ['saved-queries'], queryFn: prefs.savedQueries, staleTime: 30_000 });
+  const saved = useQuery({
+    queryKey: ['saved-queries'],
+    queryFn: prefs.savedQueries,
+    staleTime: 30_000,
+  });
 
   const saveQuery = useMutation({
     mutationFn: (label: string) =>
@@ -77,7 +81,10 @@ export function SavePanel({
   const savedRows = useMemo(
     () =>
       (saved.data ?? []).filter(
-        (entry) => !term || entry.name.toLowerCase().includes(term) || entry.sql.toLowerCase().includes(term),
+        (entry) =>
+          !term ||
+          entry.name.toLowerCase().includes(term) ||
+          entry.sql.toLowerCase().includes(term),
       ),
     [saved.data, term],
   );
@@ -175,7 +182,9 @@ export function SavePanel({
                     )}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-[12px] text-ink-soft">{summariseSql(entry.sql, 140)}</p>
+                    <p className="truncate font-mono text-[12px] text-ink-soft">
+                      {summariseSql(entry.sql, 140)}
+                    </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-faint">
                       <span>{formatRelativeTime(entry.executedAt)}</span>
                       <span>·</span>
@@ -184,8 +193,12 @@ export function SavePanel({
                       </span>
                       <span>·</span>
                       <span>{formatDuration(entry.durationMs)}</span>
-                      {entry.affectedRows !== null && <Badge variant="neutral">{entry.affectedRows} affected</Badge>}
-                      {entry.rowCount !== null && <Badge variant="neutral">{entry.rowCount} rows</Badge>}
+                      {entry.affectedRows !== null && (
+                        <Badge variant="neutral">{entry.affectedRows} affected</Badge>
+                      )}
+                      {entry.rowCount !== null && (
+                        <Badge variant="neutral">{entry.rowCount} rows</Badge>
+                      )}
                       {entry.errorMessage && (
                         <span className="truncate text-negative">{entry.errorMessage}</span>
                       )}
@@ -220,7 +233,9 @@ export function SavePanel({
                 <Star className="mt-[3px] size-3.5 shrink-0 text-caution" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12.5px] font-medium text-ink">{entry.name}</p>
-                  <p className="truncate font-mono text-[11.5px] text-ink-faint">{summariseSql(entry.sql, 140)}</p>
+                  <p className="truncate font-mono text-[11.5px] text-ink-faint">
+                    {summariseSql(entry.sql, 140)}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover/row:opacity-100">
                   <Button variant="subtle" size="xs" onClick={() => onUse(entry.sql)}>

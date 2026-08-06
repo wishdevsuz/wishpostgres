@@ -2,9 +2,21 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/form';
 import { EmptyState } from '@/components/ui/misc';
 import type { FilterOperator, FilterSpec } from '@/types';
 
@@ -45,7 +57,9 @@ export function FilterDialog({
   }, [open, filters]);
 
   function update(index: number, patch: Partial<FilterSpec>) {
-    setDraft((current) => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+    setDraft((current) =>
+      current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)),
+    );
   }
 
   return (
@@ -71,7 +85,10 @@ export function FilterDialog({
                     {index === 0 ? 'where' : 'and'}
                   </span>
 
-                  <Select value={filter.column} onValueChange={(column) => update(index, { column })}>
+                  <Select
+                    value={filter.column}
+                    onValueChange={(column) => update(index, { column })}
+                  >
                     <SelectTrigger className="w-[190px]">
                       <SelectValue />
                     </SelectTrigger>

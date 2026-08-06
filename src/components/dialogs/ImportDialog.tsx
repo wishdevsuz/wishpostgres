@@ -3,7 +3,13 @@ import { ArrowRight, FileUp, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import {
   CheckboxField,
   Field,
@@ -265,7 +271,10 @@ export function ImportDialog({
                       {preview.rows.slice(0, 20).map((row, index) => (
                         <tr key={index} className={index % 2 ? 'bg-[#ffffff03]' : undefined}>
                           {preview.columns.map((_, cell) => (
-                            <td key={cell} className="truncate border-b border-line/50 px-2 py-1 text-ink-soft">
+                            <td
+                              key={cell}
+                              className="truncate border-b border-line/50 px-2 py-1 text-ink-soft"
+                            >
                               {row[cell] ?? <span className="italic text-ink-faint">NULL</span>}
                             </td>
                           ))}
