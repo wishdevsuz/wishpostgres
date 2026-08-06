@@ -2,7 +2,7 @@
 #
 # WishPostgres installer.
 #
-#   curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/install.sh | bash
+#   curl -fsSL https://wishdevsuz.github.io/wishpostgres/install.sh | bash
 #
 # Detects the distribution, picks the matching package from the latest GitHub
 # release, verifies its checksum and installs it. Falls back to the AppImage on
@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-REPO="wishdevsuz/wish-pgAdmin"
+REPO="wishdevsuz/wishpostgres"
 PREFIX="${WISHPOSTGRES_PREFIX:-$HOME/.local/bin}"
 
 # Colour only when stdout is a terminal, so redirecting the installer into a

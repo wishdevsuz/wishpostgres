@@ -13,8 +13,8 @@ set -euo pipefail
 
 VERSION="${VERSION:?VERSION is required}"
 TAG="${TAG:-v$VERSION}"
-REPO="${REPO:-wishdevsuz/wish-pgAdmin}"
-PAGES="${PAGES:-https://wishdevsuz.github.io/wish-pgAdmin}"
+REPO="${REPO:-wishdevsuz/wishpostgres}"
+PAGES="${PAGES:-https://wishdevsuz.github.io/wishpostgres}"
 
 # Pull the section for this version out of the changelog: everything between
 # `## [x.y.z]` and the next `## [` heading.

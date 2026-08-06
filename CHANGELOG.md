@@ -4,6 +4,24 @@ All notable changes to WishPostgres are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The repository moved to `wishdevsuz/wishpostgres`.** GitHub redirects the
+  old repository URLs, so clones, issues and release links keep working. The
+  GitHub Pages address is not redirected, so anyone who added the APT
+  repository before the move has to point it at the new host:
+
+  ```bash
+  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/wishpostgres.gpg] https://wishdevsuz.github.io/wishpostgres/apt stable main" \
+    | sudo tee /etc/apt/sources.list.d/wishpostgres.list > /dev/null
+  sudo apt update
+  ```
+
+  The install one-liner is now
+  `curl -fsSL https://wishdevsuz.github.io/wishpostgres/install.sh | bash`.
+
 ## [1.0.1]
 
 ### Security
@@ -129,5 +147,5 @@ First public release.
 - A one-line installer that detects the distribution, verifies the checksum and
   installs the right package.
 
-[1.0.1]: https://github.com/wishdevsuz/wish-pgAdmin/releases/tag/v1.0.1
-[1.0.0]: https://github.com/wishdevsuz/wish-pgAdmin/releases/tag/v1.0.0
+[1.0.1]: https://github.com/wishdevsuz/wishpostgres/releases/tag/v1.0.1
+[1.0.0]: https://github.com/wishdevsuz/wishpostgres/releases/tag/v1.0.0

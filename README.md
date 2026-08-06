@@ -9,12 +9,12 @@
 Browse and edit data, design tables, run SQL, move data in and out, and back up
 databases — in a single window that starts in under a second.
 
-[![CI](https://github.com/wishdevsuz/wish-pgAdmin/actions/workflows/ci.yml/badge.svg)](https://github.com/wishdevsuz/wish-pgAdmin/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/wishdevsuz/wish-pgAdmin?label=release)](https://github.com/wishdevsuz/wish-pgAdmin/releases/latest)
+[![CI](https://github.com/wishdevsuz/wishpostgres/actions/workflows/ci.yml/badge.svg)](https://github.com/wishdevsuz/wishpostgres/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/wishdevsuz/wishpostgres?label=release)](https://github.com/wishdevsuz/wishpostgres/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```bash
-curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/install.sh | bash
+curl -fsSL https://wishdevsuz.github.io/wishpostgres/install.sh | bash
 ```
 
 </div>
@@ -145,9 +145,9 @@ your system:
 
 ```bash
 sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/wishpostgres.gpg \
+curl -fsSL https://wishdevsuz.github.io/wishpostgres/wishpostgres.gpg \
   | sudo tee /etc/apt/keyrings/wishpostgres.gpg > /dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/wishpostgres.gpg] https://wishdevsuz.github.io/wish-pgAdmin/apt stable main" \
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/wishpostgres.gpg] https://wishdevsuz.github.io/wishpostgres/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/wishpostgres.list > /dev/null
 sudo apt update
 sudo apt install wishpostgres
@@ -159,7 +159,7 @@ wishpostgres` removes it.
 ### Any distribution — one line
 
 ```bash
-curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/install.sh | bash
+curl -fsSL https://wishdevsuz.github.io/wishpostgres/install.sh | bash
 ```
 
 The installer works out your distribution, downloads the matching package from
@@ -174,7 +174,7 @@ Useful variables: `WISHPOSTGRES_VERSION` to pin a version,
 
 ### By hand
 
-Every [release](https://github.com/wishdevsuz/wish-pgAdmin/releases/latest)
+Every [release](https://github.com/wishdevsuz/wishpostgres/releases/latest)
 carries four files:
 
 | File | For |
@@ -199,8 +199,8 @@ sha256sum -c SHA256SUMS --ignore-missing
 ### From source
 
 ```bash
-git clone https://github.com/wishdevsuz/wish-pgAdmin.git
-cd wish-pgAdmin
+git clone https://github.com/wishdevsuz/wishpostgres.git
+cd wishpostgres
 npm install
 npm run tauri build
 ```
