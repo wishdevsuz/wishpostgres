@@ -330,6 +330,11 @@ export interface RestoreRequest {
   stopOnError: boolean;
   singleTransaction: boolean;
   binaryDirectory: string | null;
+  /**
+   * Restore a file containing psql meta-commands such as `\!`, which run
+   * outside the database. Refused unless this is explicitly set.
+   */
+  allowMetaCommands: boolean;
 }
 
 export interface TransferOutcome {
