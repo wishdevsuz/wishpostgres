@@ -119,6 +119,16 @@ download() {
     || die "download failed: $BASE/$name"
 }
 
+sha256_of() {
+  if command -v sha256sum > /dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum > /dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v openssl > /dev/null 2>&1; then
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  fi
+}
+
 verify() {
   local name="$1"
   if ! curl -fsSL -o "$WORK/SHA256SUMS" "$BASE/SHA256SUMS" 2> /dev/null; then
@@ -126,15 +136,28 @@ verify() {
     return 0
   fi
   say "Verifying checksum"
+
   local expected
-  expected=$(grep -E "[ /]${name}\$" "$WORK/SHA256SUMS" | awk '{print $1}' | head -1)
+  # The name is matched literally: a `.` in it must not act as a wildcard.
+  expected=$(grep -E "[ /]$(printf '%s' "$name" | sed 's/[.[\*^$]/\\&/g')\$" \
+    "$WORK/SHA256SUMS" | awk '{print $1}' | head -1)
   [ -n "$expected" ] || {
     warn "$name is not listed in SHA256SUMS; skipping verification."
     return 0
   }
+
   local actual
-  actual=$(sha256sum "$WORK/$name" | awk '{print $1}')
-  [ "$expected" = "$actual" ] || die "checksum mismatch for $name — refusing to install."
+  actual=$(sha256_of "$WORK/$name")
+  # Distinguish "no tool to hash with" from "the hashes differ" — reporting a
+  # missing sha256sum as a checksum mismatch would send people hunting a
+  # corrupt download that is perfectly fine.
+  [ -n "$actual" ] || {
+    warn "no sha256sum, shasum or openssl found; skipping verification."
+    return 0
+  }
+  [ "$expected" = "$actual" ] || die "checksum mismatch for $name — refusing to install.
+  expected $expected
+  got      $actual"
   note "ok"
 }
 
@@ -147,8 +170,10 @@ case "$METHOD" in
     verify "$PACKAGE"
     say "Installing with apt"
     # `apt install ./file.deb` resolves the dependencies; `dpkg -i` would not.
+    # DEBIAN_FRONTEND, because this often runs from `curl | bash` where there is
+    # no usable stdin for a configuration prompt to read from.
     $SUDO apt-get update -qq || true
-    $SUDO apt-get install -y "$WORK/$PACKAGE"
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y "$WORK/$PACKAGE"
     ;;
 
   rpm)
