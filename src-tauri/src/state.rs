@@ -6,6 +6,11 @@ use crate::error::{AppError, AppResult};
 use crate::storage::models::SavedConnection;
 use crate::storage::Storage;
 
+/// How long to wait for the TCP connect and the PostgreSQL handshake. This is
+/// deliberately independent of the query timeout: a server that is unreachable
+/// should be reported quickly even when long queries are allowed.
+const CONNECT_TIMEOUT_SECONDS: u64 = 15;
+
 pub struct AppState {
     pub sessions: Arc<SessionManager>,
     pub storage: Storage,
@@ -42,9 +47,19 @@ impl AppState {
         let settings = self.storage.settings()?;
 
         let mut target = connection.to_target(password, database);
-        target.connect_timeout_seconds = Some(settings.query_timeout_seconds.max(5) as u64);
-        if target.statement_timeout_ms.is_none() && settings.statement_timeout_ms > 0 {
-            target.statement_timeout_ms = Some(settings.statement_timeout_ms);
+        target.connect_timeout_seconds = Some(CONNECT_TIMEOUT_SECONDS);
+        // `query_timeout_seconds` is how long a *statement* may run, so it maps
+        // onto `statement_timeout`, not onto the handshake timeout. A
+        // per-connection value still wins over the global setting.
+        if target.statement_timeout_ms.is_none() {
+            let from_settings = if settings.statement_timeout_ms > 0 {
+                Some(settings.statement_timeout_ms)
+            } else if settings.query_timeout_seconds > 0 {
+                Some(settings.query_timeout_seconds as u64 * 1000)
+            } else {
+                None
+            };
+            target.statement_timeout_ms = from_settings;
         }
         if target.search_path.is_none() {
             let schema = settings.default_schema.trim();

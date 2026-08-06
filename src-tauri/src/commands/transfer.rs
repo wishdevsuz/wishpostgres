@@ -1,5 +1,7 @@
 use pgl_core::backup::{BackupRequest, RestoreRequest, TransferOutcome};
-use pgl_core::models::{ExportRequest, ImportOutcome, ImportPreview, ImportRequest, TransferProgress};
+use pgl_core::models::{
+    ExportRequest, ImportOutcome, ImportPreview, ImportRequest, TransferProgress,
+};
 use pgl_core::{backup, export, import};
 use tauri::{AppHandle, Emitter, State};
 

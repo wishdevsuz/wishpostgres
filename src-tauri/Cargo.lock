@@ -3165,31 +3165,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "postgres-lite"
-version = "1.0.0"
-dependencies = [
- "base64 0.22.1",
- "chacha20poly1305",
- "chrono",
- "dirs 5.0.1",
- "keyring",
- "parking_lot",
- "pgl-core",
- "rand 0.8.7",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-window-state",
- "thiserror 2.0.19",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "postgres-protocol"
 version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6116,6 +6091,31 @@ checksum = "cb5a765337c50e9ec252c2069be9bf91c7df47afb103b642ba3a53bf8101be97"
 dependencies = [
  "cfg-if",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "wishpostgres"
+version = "1.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "chrono",
+ "dirs 5.0.1",
+ "keyring",
+ "parking_lot",
+ "pgl-core",
+ "rand 0.8.7",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-window-state",
+ "thiserror 2.0.19",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

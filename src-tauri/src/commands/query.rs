@@ -76,19 +76,30 @@ pub async fn explain_sql(
         .first()
         .ok_or_else(|| AppError::invalid("there is nothing to explain"))?;
 
-    let client = state.client(&connection_id, &database).await?;
-    let prefix = if analyze {
-        "EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT TEXT) "
+    let mut client = state.client(&connection_id, &database).await?;
+
+    let result = if analyze {
+        // EXPLAIN ANALYZE really executes the statement, so an `ANALYZE` of a
+        // DELETE would delete rows. Run it inside a transaction that is always
+        // rolled back: the plan and the real timings survive, the writes do not.
+        let transaction = client
+            .transaction()
+            .await
+            .map_err(pgl_core::CoreError::from)?;
+        let plan = query::explain(
+            &transaction,
+            statement,
+            "EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT TEXT) ",
+        )
+        .await;
+        transaction
+            .rollback()
+            .await
+            .map_err(pgl_core::CoreError::from)?;
+        plan?
     } else {
-        "EXPLAIN (VERBOSE, FORMAT TEXT) "
+        query::explain(&client, statement, "EXPLAIN (VERBOSE, FORMAT TEXT) ").await?
     };
 
-    let result = query::execute_statement(&client, &format!("{prefix}{statement}")).await?;
-    Ok(result
-        .rows
-        .iter()
-        .filter_map(|row| row.first())
-        .map(|value| value.as_str().unwrap_or_default().to_string())
-        .collect::<Vec<_>>()
-        .join("\n"))
+    Ok(result)
 }

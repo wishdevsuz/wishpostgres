@@ -34,7 +34,11 @@ pub struct SavedConnection {
 }
 
 impl SavedConnection {
-    pub fn to_target(&self, password: Option<String>, database: Option<&str>) -> pgl_core::ConnectionTarget {
+    pub fn to_target(
+        &self,
+        password: Option<String>,
+        database: Option<&str>,
+    ) -> pgl_core::ConnectionTarget {
         pgl_core::ConnectionTarget {
             id: self.id.clone(),
             host: self.host.clone(),

@@ -69,5 +69,5 @@ pub fn run() {
             commands::prefs::delete_saved_query,
         ])
         .run(tauri::generate_context!())
-        .expect("failed to start Postgres Lite");
+        .expect("failed to start WishPostgres");
 }

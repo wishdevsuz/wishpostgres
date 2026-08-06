@@ -14,6 +14,10 @@ use secrets::SecretStore;
 struct JsonFile<T> {
     path: PathBuf,
     cache: Mutex<Option<T>>,
+    /// Held across the whole read-modify-write of [`JsonFile::update`]. Tauri
+    /// runs commands concurrently, so without it two updates that overlap would
+    /// both read the old document and the second write would drop the first.
+    exclusive: Mutex<()>,
 }
 
 impl<T> JsonFile<T>
@@ -24,6 +28,7 @@ where
         Self {
             path,
             cache: Mutex::new(None),
+            exclusive: Mutex::new(()),
         }
     }
 
@@ -52,6 +57,7 @@ where
     }
 
     fn update<R>(&self, mutate: impl FnOnce(&mut T) -> AppResult<R>) -> AppResult<R> {
+        let _guard = self.exclusive.lock();
         let mut value = self.read()?;
         let result = mutate(&mut value)?;
         self.write(&value)?;
@@ -89,12 +95,7 @@ impl Storage {
     pub fn connections(&self) -> AppResult<Vec<SavedConnection>> {
         let mut list = self.connections.read()?;
         for connection in &mut list {
-            connection.has_password = self
-                .secrets
-                .get(&connection.id)
-                .ok()
-                .flatten()
-                .is_some();
+            connection.has_password = self.secrets.get(&connection.id).ok().flatten().is_some();
         }
         Ok(list)
     }
@@ -109,7 +110,10 @@ impl Storage {
 
     pub fn upsert_connection(&self, connection: SavedConnection) -> AppResult<SavedConnection> {
         self.connections.update(|list| {
-            match list.iter_mut().find(|existing| existing.id == connection.id) {
+            match list
+                .iter_mut()
+                .find(|existing| existing.id == connection.id)
+            {
                 Some(existing) => {
                     let created_at = existing.created_at.clone();
                     *existing = SavedConnection {
@@ -127,8 +131,10 @@ impl Storage {
     }
 
     pub fn delete_connection(&self, id: &str) -> AppResult<()> {
-        self.connections
-            .update(|list| Ok(list.retain(|connection| connection.id != id)))?;
+        self.connections.update(|list| {
+            let _: () = list.retain(|connection| connection.id != id);
+            Ok(())
+        })?;
         self.secrets.remove(id)?;
         self.workspace.update(|workspace| {
             if workspace.last_connection_id.as_deref() == Some(id) {
@@ -194,8 +200,8 @@ impl Storage {
     }
 
     pub fn upsert_query(&self, query: SavedQuery) -> AppResult<SavedQuery> {
-        self.queries.update(|list| {
-            match list.iter_mut().find(|existing| existing.id == query.id) {
+        self.queries.update(
+            |list| match list.iter_mut().find(|existing| existing.id == query.id) {
                 Some(existing) => {
                     *existing = SavedQuery {
                         created_at: existing.created_at.clone(),
@@ -207,12 +213,14 @@ impl Storage {
                     list.push(query.clone());
                     Ok(query.clone())
                 }
-            }
-        })
+            },
+        )
     }
 
     pub fn delete_query(&self, id: &str) -> AppResult<()> {
-        self.queries
-            .update(|list| Ok(list.retain(|query| query.id != id)))
+        self.queries.update(|list| {
+            let _: () = list.retain(|query| query.id != id);
+            Ok(())
+        })
     }
 }
