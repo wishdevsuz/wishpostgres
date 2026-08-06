@@ -32,7 +32,7 @@ export function toReport(error: unknown): ErrorReport {
     hint: null,
     position: null,
     reason: 'Something failed inside the application rather than the database.',
-    suggestion: 'Retry the action. If it keeps failing, restart Postgres Lite.',
+    suggestion: 'Retry the action. If it keeps failing, restart WishPostgres.',
   };
 }
 

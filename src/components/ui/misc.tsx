@@ -181,7 +181,9 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-8 py-12', className)}>
+    <div
+      className={cn('flex h-full flex-col items-center justify-center gap-3 px-8 py-12', className)}
+    >
       {icon && (
         <div className="flex size-11 items-center justify-center rounded-xl border border-line bg-[#ffffff06] text-ink-faint [&_svg]:size-5">
           {icon}

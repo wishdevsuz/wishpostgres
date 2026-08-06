@@ -123,14 +123,24 @@ export function ResultPanel({ results }: { results: QueryResult[] }) {
               spellCheck={false}
               trailing={
                 search ? (
-                  <Button variant="ghost" size="iconXs" aria-label="Clear" onClick={() => setSearch('')}>
+                  <Button
+                    variant="ghost"
+                    size="iconXs"
+                    aria-label="Clear"
+                    onClick={() => setSearch('')}
+                  >
                     <X />
                   </Button>
                 ) : undefined
               }
             />
             <Tooltip content="Export result">
-              <Button variant="ghost" size="iconSm" aria-label="Export" onClick={() => setExporting(true)}>
+              <Button
+                variant="ghost"
+                size="iconSm"
+                aria-label="Export"
+                onClick={() => setExporting(true)}
+              >
                 <Download />
               </Button>
             </Tooltip>
@@ -139,13 +149,23 @@ export function ResultPanel({ results }: { results: QueryResult[] }) {
 
         {filtered.length > PAGE_SIZE && (
           <div className="flex items-center gap-1 text-[11.5px] text-ink-muted">
-            <Button variant="ghost" size="xs" disabled={page === 0} onClick={() => setPage(page - 1)}>
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
               Prev
             </Button>
             <span className="tabular-nums">
               {page + 1} / {lastPage + 1}
             </span>
-            <Button variant="ghost" size="xs" disabled={page >= lastPage} onClick={() => setPage(page + 1)}>
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={page >= lastPage}
+              onClick={() => setPage(page + 1)}
+            >
               Next
             </Button>
           </div>

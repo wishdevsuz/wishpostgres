@@ -27,10 +27,15 @@ export function WelcomePage() {
             Create your first PostgreSQL connection
           </h1>
           <p className="mx-auto mt-2 max-w-[340px] text-balance text-[13px] leading-relaxed text-ink-muted">
-            Point Postgres Lite at a server and you can browse data, edit rows, design tables and run SQL
-            straight away.
+            Point WishPostgres at a server and you can browse data, edit rows, design tables and run
+            SQL straight away.
           </p>
-          <Button variant="primary" size="lg" className="mt-6 w-full" onClick={() => editConnection(null)}>
+          <Button
+            variant="primary"
+            size="lg"
+            className="mt-6 w-full"
+            onClick={() => editConnection(null)}
+          >
             <Plug className="size-4" />
             Connect
           </Button>
@@ -54,7 +59,7 @@ export function WelcomePage() {
             <Database className="size-5" />
           </div>
           <div>
-            <h1 className="text-[17px] font-semibold tracking-[-0.02em]">Postgres Lite</h1>
+            <h1 className="text-[17px] font-semibold tracking-[-0.02em]">WishPostgres</h1>
             <p className="text-[12px] text-ink-muted">Pick a connection to get started.</p>
           </div>
         </div>

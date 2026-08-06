@@ -1,4 +1,5 @@
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export type TypeCategory =
   | 'number'
@@ -17,7 +18,8 @@ export type TypeCategory =
   | 'interval'
   | 'other';
 
-export type RelationKind = 'table' | 'view' | 'materializedView' | 'foreignTable' | 'partitionedTable';
+export type RelationKind =
+  'table' | 'view' | 'materializedView' | 'foreignTable' | 'partitionedTable';
 
 export type IdentityKind = 'primaryKey' | 'unique' | 'ctid' | 'none';
 

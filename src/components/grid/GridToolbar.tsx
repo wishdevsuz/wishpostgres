@@ -99,7 +99,12 @@ export function GridToolbar({
         className="h-7 w-[210px] text-[12px]"
         trailing={
           search ? (
-            <Button variant="ghost" size="iconXs" aria-label="Clear search" onClick={() => onSearchChange('')}>
+            <Button
+              variant="ghost"
+              size="iconXs"
+              aria-label="Clear search"
+              onClick={() => onSearchChange('')}
+            >
               <X />
             </Button>
           ) : undefined
@@ -107,7 +112,11 @@ export function GridToolbar({
       />
 
       <Tooltip content="Filters">
-        <Button variant={filters.length > 0 ? 'primary' : 'ghost'} size="sm" onClick={onOpenFilters}>
+        <Button
+          variant={filters.length > 0 ? 'primary' : 'ghost'}
+          size="sm"
+          onClick={onOpenFilters}
+        >
           <Filter />
           Filter
           {filters.length > 0 && <Badge variant="neutral">{filters.length}</Badge>}

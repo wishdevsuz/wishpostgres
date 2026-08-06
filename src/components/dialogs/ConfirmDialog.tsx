@@ -2,7 +2,13 @@ import { TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/form';
 import { notify } from '@/utils/notify';
@@ -36,7 +42,8 @@ export function ConfirmDialog({
     if (open) setTyped('');
   }, [open]);
 
-  const blocked = requireConfirmation && typed.trim().toLowerCase() !== confirmationWord.toLowerCase();
+  const blocked =
+    requireConfirmation && typed.trim().toLowerCase() !== confirmationWord.toLowerCase();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

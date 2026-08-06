@@ -10,8 +10,9 @@ import {
   Table2,
   Trash2,
   Type,
+  X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/menu';
 import { TreeItem, TreeMessage, TreeSection, TreeSkeleton } from '@/components/layout/tree';
 import { useDatabases, useRelations, useSchemas } from '@/hooks/use-catalog';
+import { useResetOnScopeChange, useSchemaFocus } from '@/hooks/use-scope-sync';
 import { useConnectionStore } from '@/state/connection-store';
 import { useWorkspaceStore } from '@/state/workspace-store';
 import { formatBytes, formatCount } from '@/utils/format';
@@ -42,6 +44,7 @@ export function ObjectTree() {
   const schema = useWorkspaceStore((state) => state.schema);
   const setSchema = useWorkspaceStore((state) => state.setSchema);
   const setView = useWorkspaceStore((state) => state.setView);
+  const view = useWorkspaceStore((state) => state.view);
 
   const [open, setOpen] = useState({ databases: true, schemas: true, tables: true, views: false });
   const [filter, setFilter] = useState('');
@@ -51,27 +54,42 @@ export function ObjectTree() {
   const tables = useRelations(schema, TABLE_KINDS);
   const views = useRelations(schema, VIEW_KINDS);
 
+  // Land on a schema that exists in the database the user just opened.
+  useSchemaFocus(schemas.data, schemas.isLoading);
+
+  // A filter typed for one database is meaningless in the next one.
+  useResetOnScopeChange(useCallback(() => setFilter(''), []));
+
+  const term = filter.trim().toLowerCase();
+  const matches = useCallback(
+    (value: string) => !term || value.toLowerCase().includes(term),
+    [term],
+  );
+
   const connectable = useMemo(
-    () => (databases.data ?? []).filter((entry) => entry.canConnect && !entry.isTemplate),
-    [databases.data],
+    () =>
+      (databases.data ?? []).filter(
+        (entry) => entry.canConnect && !entry.isTemplate && matches(entry.name),
+      ),
+    [databases.data, matches],
   );
 
   const userSchemas = useMemo(
-    () => (schemas.data ?? []).filter((entry) => !entry.isSystem),
-    [schemas.data],
+    () => (schemas.data ?? []).filter((entry) => !entry.isSystem && matches(entry.name)),
+    [schemas.data, matches],
+  );
+
+  const visibleTables = useMemo(
+    () => (tables.data ?? []).filter((relation) => matches(relation.name)),
+    [tables.data, matches],
+  );
+
+  const visibleViews = useMemo(
+    () => (views.data ?? []).filter((relation) => matches(relation.name)),
+    [views.data, matches],
   );
 
   if (!activeId || !activeDatabase) return null;
-
-  const filterRelations = (list: RelationInfo[] | undefined) => {
-    const term = filter.trim().toLowerCase();
-    if (!list) return [];
-    if (!term) return list;
-    return list.filter((relation) => relation.name.toLowerCase().includes(term));
-  };
-
-  const visibleTables = filterRelations(tables.data);
-  const visibleViews = filterRelations(views.data);
 
   return (
     <div className="space-y-1">
@@ -83,6 +101,18 @@ export function ObjectTree() {
           leading={<Search />}
           className="h-7 text-[12px]"
           spellCheck={false}
+          trailing={
+            filter ? (
+              <Button
+                variant="ghost"
+                size="iconXs"
+                aria-label="Clear filter"
+                onClick={() => setFilter('')}
+              >
+                <X />
+              </Button>
+            ) : undefined
+          }
         />
       </div>
 
@@ -97,7 +127,9 @@ export function ObjectTree() {
         {databases.isLoading ? (
           <TreeSkeleton />
         ) : connectable.length === 0 ? (
-          <TreeMessage>No databases you can connect to.</TreeMessage>
+          <TreeMessage>
+            {term ? 'No databases match that filter.' : 'No databases you can connect to.'}
+          </TreeMessage>
         ) : (
           connectable.map((entry) => (
             <TreeItem
@@ -128,6 +160,10 @@ export function ObjectTree() {
       >
         {schemas.isLoading ? (
           <TreeSkeleton rows={2} />
+        ) : userSchemas.length === 0 ? (
+          <TreeMessage>
+            {term ? 'No schemas match that filter.' : 'This database has no user schemas.'}
+          </TreeMessage>
         ) : (
           userSchemas.map((entry) => (
             <TreeItem
@@ -150,7 +186,7 @@ export function ObjectTree() {
         relations={visibleTables}
         loading={tables.isLoading}
         fetching={tables.isFetching}
-        emptyMessage={filter ? 'No tables match that filter.' : 'This schema has no tables.'}
+        emptyMessage={term ? 'No tables match that filter.' : 'This schema has no tables.'}
       />
 
       <RelationSection
@@ -161,7 +197,7 @@ export function ObjectTree() {
         relations={visibleViews}
         loading={views.isLoading}
         fetching={views.isFetching}
-        emptyMessage={filter ? 'No views match that filter.' : 'This schema has no views.'}
+        emptyMessage={term ? 'No views match that filter.' : 'This schema has no views.'}
       />
 
       <div className="space-y-px pt-1">
@@ -170,10 +206,22 @@ export function ObjectTree() {
           label="Functions"
           depth={0}
           onClick={() => setView('functions')}
-          active={useWorkspaceStore.getState().view === 'functions'}
+          active={view === 'functions'}
         />
-        <TreeItem icon={<Boxes />} label="Extensions" depth={0} onClick={() => setView('extensions')} />
-        <TreeItem icon={<Braces />} label="Query history" depth={0} onClick={() => setView('history')} />
+        <TreeItem
+          icon={<Boxes />}
+          label="Extensions"
+          depth={0}
+          active={view === 'extensions'}
+          onClick={() => setView('extensions')}
+        />
+        <TreeItem
+          icon={<Braces />}
+          label="Query history"
+          depth={0}
+          active={view === 'history'}
+          onClick={() => setView('history')}
+        />
       </div>
     </div>
   );
@@ -222,7 +270,12 @@ function RelationSection({
         relations.map((relation) => {
           const favorite =
             connectionId && database
-              ? isFavorite({ connectionId, database, schema: relation.schema, table: relation.name })
+              ? isFavorite({
+                  connectionId,
+                  database,
+                  schema: relation.schema,
+                  table: relation.name,
+                })
               : false;
 
           return (
@@ -235,9 +288,17 @@ function RelationSection({
                     label={relation.name}
                     title={relation.comment ?? relation.name}
                     active={current?.schema === relation.schema && current?.table === relation.name}
-                    onClick={() => openTable({ schema: relation.schema, table: relation.name, kind: relation.kind })}
+                    onClick={() =>
+                      openTable({
+                        schema: relation.schema,
+                        table: relation.name,
+                        kind: relation.kind,
+                      })
+                    }
                     meta={
-                      relation.estimatedRows !== null ? `~${formatCount(relation.estimatedRows)}` : undefined
+                      relation.estimatedRows !== null
+                        ? `~${formatCount(relation.estimatedRows)}`
+                        : undefined
                     }
                     actions={
                       connectionId && database ? (
@@ -266,20 +327,32 @@ function RelationSection({
               </ContextMenuTrigger>
               <ContextMenuContent>
                 <ContextMenuItem
-                  onSelect={() => openTable({ schema: relation.schema, table: relation.name, kind: relation.kind })}
+                  onSelect={() =>
+                    openTable({
+                      schema: relation.schema,
+                      table: relation.name,
+                      kind: relation.kind,
+                    })
+                  }
                 >
                   <Table2 /> Browse data
                 </ContextMenuItem>
                 <ContextMenuItem
                   onSelect={() =>
-                    openTable({ schema: relation.schema, table: relation.name, kind: relation.kind }, 'structure')
+                    openTable(
+                      { schema: relation.schema, table: relation.name, kind: relation.kind },
+                      'structure',
+                    )
                   }
                 >
                   <Type /> Structure
                 </ContextMenuItem>
                 <ContextMenuItem
                   onSelect={() =>
-                    openTable({ schema: relation.schema, table: relation.name, kind: relation.kind }, 'sql')
+                    openTable(
+                      { schema: relation.schema, table: relation.name, kind: relation.kind },
+                      'sql',
+                    )
                   }
                 >
                   <FileCode2 /> View definition
@@ -288,7 +361,10 @@ function RelationSection({
                 <ContextMenuItem
                   danger
                   onSelect={() =>
-                    openTable({ schema: relation.schema, table: relation.name, kind: relation.kind }, 'structure')
+                    openTable(
+                      { schema: relation.schema, table: relation.name, kind: relation.kind },
+                      'structure',
+                    )
                   }
                 >
                   <Trash2 /> Drop or truncate…

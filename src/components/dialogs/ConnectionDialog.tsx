@@ -5,7 +5,13 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { CheckboxField, Field } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { connections as api } from '@/services/api';
@@ -117,7 +123,9 @@ export function ConnectionDialog() {
       close();
       notify.success(draft ? 'Connection updated' : 'Connection saved');
       if (!draft) {
-        await connect(saved.id).catch((error) => notify.failure(error, `Could not connect to ${saved.name}`));
+        await connect(saved.id).catch((error) =>
+          notify.failure(error, `Could not connect to ${saved.name}`),
+        );
       }
     } catch (error) {
       notify.failure(error, 'Could not save the connection');
@@ -130,7 +138,7 @@ export function ConnectionDialog() {
         <DialogHeader
           icon={<Database />}
           title={draft ? `Edit ${draft.name}` : 'New connection'}
-          description="Postgres Lite stores the password in your system keyring when one is available."
+          description="WishPostgres stores the password in your system keyring when one is available."
         />
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="space-y-3.5">
@@ -139,17 +147,37 @@ export function ConnectionDialog() {
             </Field>
 
             <div className="grid grid-cols-[1fr_100px] gap-3">
-              <Field label="Host" required error={form.formState.errors.host?.message} htmlFor="host">
+              <Field
+                label="Host"
+                required
+                error={form.formState.errors.host?.message}
+                htmlFor="host"
+              >
                 <Input id="host" spellCheck={false} {...form.register('host')} />
               </Field>
-              <Field label="Port" required error={form.formState.errors.port?.message} htmlFor="port">
+              <Field
+                label="Port"
+                required
+                error={form.formState.errors.port?.message}
+                htmlFor="port"
+              >
                 <Input id="port" inputMode="numeric" {...form.register('port')} />
               </Field>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Username" required error={form.formState.errors.username?.message} htmlFor="username">
-                <Input id="username" spellCheck={false} autoComplete="off" {...form.register('username')} />
+              <Field
+                label="Username"
+                required
+                error={form.formState.errors.username?.message}
+                htmlFor="username"
+              >
+                <Input
+                  id="username"
+                  spellCheck={false}
+                  autoComplete="off"
+                  {...form.register('username')}
+                />
               </Field>
               <Field
                 label="Password"
@@ -191,7 +219,12 @@ export function ConnectionDialog() {
               hint="Optional. Applied to every session on this connection, for example: app, public"
               htmlFor="searchPath"
             >
-              <Input id="searchPath" spellCheck={false} placeholder="public" {...form.register('searchPath')} />
+              <Input
+                id="searchPath"
+                spellCheck={false}
+                placeholder="public"
+                {...form.register('searchPath')}
+              />
             </Field>
 
             <div className="space-y-2.5 rounded-lg border border-line bg-[#ffffff04] p-3">
@@ -214,7 +247,12 @@ export function ConnectionDialog() {
           </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="secondary" loading={testing} onClick={() => void onTest()}>
+            <Button
+              type="button"
+              variant="secondary"
+              loading={testing}
+              onClick={() => void onTest()}
+            >
               <Zap />
               Test connection
             </Button>

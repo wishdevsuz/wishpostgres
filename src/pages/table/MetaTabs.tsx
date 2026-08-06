@@ -170,22 +170,28 @@ export function StatisticsTab({ target }: { target: TableTarget }) {
             <table className="w-full border-collapse text-[12px]">
               <thead className="bg-elevated">
                 <tr className="text-left">
-                  {['Column', 'NULL fraction', 'Distinct', 'Avg width', 'Most common'].map((label) => (
-                    <th
-                      key={label}
-                      className="whitespace-nowrap border-b border-line px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted"
-                    >
-                      {label}
-                    </th>
-                  ))}
+                  {['Column', 'NULL fraction', 'Distinct', 'Avg width', 'Most common'].map(
+                    (label) => (
+                      <th
+                        key={label}
+                        className="whitespace-nowrap border-b border-line px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted"
+                      >
+                        {label}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {data.columnStats.map((column, index) => (
                   <tr key={column.column} className={index % 2 ? 'bg-[#ffffff03]' : undefined}>
-                    <td className="border-b border-line/50 px-3 py-1 font-medium text-ink">{column.column}</td>
+                    <td className="border-b border-line/50 px-3 py-1 font-medium text-ink">
+                      {column.column}
+                    </td>
                     <td className="border-b border-line/50 px-3 py-1 tabular-nums text-ink-muted">
-                      {column.nullFraction === null ? '—' : `${(column.nullFraction * 100).toFixed(1)}%`}
+                      {column.nullFraction === null
+                        ? '—'
+                        : `${(column.nullFraction * 100).toFixed(1)}%`}
                     </td>
                     <td className="border-b border-line/50 px-3 py-1 tabular-nums text-ink-muted">
                       {distinctLabel(column.distinctValues)}

@@ -101,7 +101,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   setView: (view) => set({ view }),
-  setSchema: (schema) => set({ schema }),
+
+  /**
+   * Switching schema closes a table that belongs to the old one, so the main
+   * pane can never keep showing a relation the sidebar is no longer scoped to.
+   */
+  setSchema: (schema) =>
+    set((state) => {
+      if (state.schema === schema) return { schema };
+      const stale = state.table !== null && state.table.schema !== schema;
+      return {
+        schema,
+        table: stale ? null : state.table,
+        view: stale && state.view === 'table' ? 'welcome' : state.view,
+      };
+    }),
 
   openTable: (table, tab = 'browse') => set({ table, tableTab: tab, view: 'table' }),
   setTableTab: (tableTab) => set({ tableTab }),

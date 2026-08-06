@@ -43,7 +43,12 @@ export function GlobalSearchDialog() {
     openTable({
       schema: hit.schema,
       table: hit.name,
-      kind: hit.kind === 'view' ? 'view' : hit.kind === 'materialized view' ? 'materializedView' : 'table',
+      kind:
+        hit.kind === 'view'
+          ? 'view'
+          : hit.kind === 'materialized view'
+            ? 'materializedView'
+            : 'table',
     });
   }
 
@@ -95,9 +100,13 @@ export function GlobalSearchDialog() {
                       onSelect={() => activate(hit)}
                       className="flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] text-ink-soft data-[selected=true]:bg-[#ffffff12] data-[selected=true]:text-ink"
                     >
-                      <span className="flex shrink-0 text-ink-faint [&_svg]:size-3.5">{iconFor(hit.kind)}</span>
+                      <span className="flex shrink-0 text-ink-faint [&_svg]:size-3.5">
+                        {iconFor(hit.kind)}
+                      </span>
                       <span className="truncate">{hit.name}</span>
-                      {hit.parent && <span className="shrink-0 text-[11px] text-ink-faint">in {hit.parent}</span>}
+                      {hit.parent && (
+                        <span className="shrink-0 text-[11px] text-ink-faint">in {hit.parent}</span>
+                      )}
                       <div className="flex-1" />
                       {hit.detail && (
                         <span className="max-w-[200px] shrink-0 truncate font-mono text-[10.5px] text-ink-faint">

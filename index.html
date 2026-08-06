@@ -4,10 +4,41 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <title>Postgres Lite</title>
+    <title>WishPostgres</title>
+    <style>
+      /* Painted before the bundle parses, so the window never flashes white. */
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        background: #0b0d10;
+      }
+      #boot {
+        display: flex;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+      }
+      #boot span {
+        width: 26px;
+        height: 26px;
+        border: 2px solid #232932;
+        border-top-color: #5ea8ff;
+        border-radius: 50%;
+        animation: boot-spin 0.7s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot"><span></span></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

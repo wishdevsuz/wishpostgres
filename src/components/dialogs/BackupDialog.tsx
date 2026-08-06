@@ -4,7 +4,13 @@ import { DownloadCloud, UploadCloud } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
 import { CheckboxField, Field } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { ProgressBar } from '@/components/ui/misc';
@@ -111,7 +117,12 @@ export function BackupDialog() {
         <DialogBody className="space-y-3.5">
           <div className="flex items-end gap-2">
             <Field label="Destination" className="flex-1">
-              <Input readOnly value={path} placeholder="No file chosen" onClick={() => void choose()} />
+              <Input
+                readOnly
+                value={path}
+                placeholder="No file chosen"
+                onClick={() => void choose()}
+              />
             </Field>
             <Button variant="secondary" onClick={() => void choose()}>
               Choose…
@@ -241,7 +252,12 @@ export function RestoreDialog() {
         <DialogBody className="space-y-3.5">
           <div className="flex items-end gap-2">
             <Field label="Dump file" className="flex-1">
-              <Input readOnly value={path} placeholder="No file chosen" onClick={() => void choose()} />
+              <Input
+                readOnly
+                value={path}
+                placeholder="No file chosen"
+                onClick={() => void choose()}
+              />
             </Field>
             <Button variant="secondary" onClick={() => void choose()}>
               Choose…
@@ -267,7 +283,9 @@ export function RestoreDialog() {
           {busy && (
             <div className="space-y-1.5">
               <ProgressBar value={progress?.percent ?? null} />
-              <p className="truncate text-[11.5px] text-ink-muted">{progress?.message ?? 'Starting psql…'}</p>
+              <p className="truncate text-[11.5px] text-ink-muted">
+                {progress?.message ?? 'Starting psql…'}
+              </p>
             </div>
           )}
         </DialogBody>

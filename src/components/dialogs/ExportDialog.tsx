@@ -3,8 +3,22 @@ import { Download } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
-import { CheckboxField, Field, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/form';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+} from '@/components/ui/dialog';
+import {
+  CheckboxField,
+  Field,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { transfer } from '@/services/api';
 import { notify } from '@/utils/notify';
@@ -12,9 +26,24 @@ import { formatCount } from '@/utils/format';
 import type { ExportFormat, JsonValue } from '@/types';
 
 const FORMATS: { value: ExportFormat; label: string; extension: string; description: string }[] = [
-  { value: 'csv', label: 'CSV', extension: 'csv', description: 'Comma separated, one row per line.' },
-  { value: 'json', label: 'JSON', extension: 'json', description: 'An array of objects keyed by column.' },
-  { value: 'xlsx', label: 'Excel', extension: 'xlsx', description: 'A single sheet with a frozen header row.' },
+  {
+    value: 'csv',
+    label: 'CSV',
+    extension: 'csv',
+    description: 'Comma separated, one row per line.',
+  },
+  {
+    value: 'json',
+    label: 'JSON',
+    extension: 'json',
+    description: 'An array of objects keyed by column.',
+  },
+  {
+    value: 'xlsx',
+    label: 'Excel',
+    extension: 'xlsx',
+    description: 'A single sheet with a frozen header row.',
+  },
   {
     value: 'sqlInsert',
     label: 'SQL INSERT',
@@ -105,7 +134,11 @@ export function ExportDialog({
 
           {needsTable && (
             <Field label="Target table" hint="Used in the generated statements.">
-              <Input value={target} spellCheck={false} onChange={(event) => setTarget(event.target.value)} />
+              <Input
+                value={target}
+                spellCheck={false}
+                onChange={(event) => setTarget(event.target.value)}
+              />
             </Field>
           )}
 

@@ -61,7 +61,7 @@ export function TopBar() {
         <div className="flex size-6 items-center justify-center rounded-md bg-gradient-to-b from-accent to-[#3d80d4] text-[#08172b]">
           <Database className="size-3.5" />
         </div>
-        <span className="text-[13px] font-semibold tracking-[-0.01em]">Postgres Lite</span>
+        <span className="text-[13px] font-semibold tracking-[-0.01em]">WishPostgres</span>
       </div>
 
       <Separator orientation="vertical" className="h-5" />

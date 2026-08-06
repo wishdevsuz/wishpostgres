@@ -74,7 +74,9 @@ export function TablePage({ target }: { target: TableTarget }) {
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-surface px-3">
         <Table2 className="size-4 shrink-0 text-accent" />
         <div className="flex min-w-0 items-baseline gap-1.5">
-          <span className="truncate text-[13.5px] font-semibold tracking-[-0.01em]">{target.table}</span>
+          <span className="truncate text-[13.5px] font-semibold tracking-[-0.01em]">
+            {target.table}
+          </span>
           <span className="shrink-0 text-[11.5px] text-ink-faint">{target.schema}</span>
         </div>
 
@@ -145,7 +147,9 @@ export function TablePage({ target }: { target: TableTarget }) {
         </TabsList>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          {tab === 'browse' && <BrowseTab key={`${target.schema}.${target.table}`} target={target} />}
+          {tab === 'browse' && (
+            <BrowseTab key={`${target.schema}.${target.table}`} target={target} />
+          )}
           {tab === 'structure' && <StructureTab target={target} />}
           {tab === 'sql' && <DefinitionTab target={target} />}
           {tab === 'indexes' && <IndexesTab target={target} />}

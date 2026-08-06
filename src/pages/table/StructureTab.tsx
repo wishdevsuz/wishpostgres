@@ -83,14 +83,16 @@ export function StructureTab({ target }: { target: TableTarget }) {
           <table className="w-full border-collapse text-[12.5px]">
             <thead className="sticky top-0 z-10 bg-elevated">
               <tr className="text-left">
-                {['Column', 'Type', 'Nullable', 'Default', 'Attributes', 'Comment', ''].map((label) => (
-                  <th
-                    key={label}
-                    className="whitespace-nowrap border-b border-line-strong px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted"
-                  >
-                    {label}
-                  </th>
-                ))}
+                {['Column', 'Type', 'Nullable', 'Default', 'Attributes', 'Comment', ''].map(
+                  (label) => (
+                    <th
+                      key={label}
+                      className="whitespace-nowrap border-b border-line-strong px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted"
+                    >
+                      {label}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -132,7 +134,11 @@ export function StructureTab({ target }: { target: TableTarget }) {
                   <td className="border-b border-line/60 px-2 py-1.5 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="iconXs" aria-label={`Actions for ${column.name}`}>
+                        <Button
+                          variant="ghost"
+                          size="iconXs"
+                          aria-label={`Actions for ${column.name}`}
+                        >
                           <MoreHorizontal />
                         </Button>
                       </DropdownMenuTrigger>
@@ -161,7 +167,10 @@ export function StructureTab({ target }: { target: TableTarget }) {
                           {column.nullable ? 'Set NOT NULL' : 'Allow NULL'}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem danger onSelect={() => setPending({ kind: 'drop', column })}>
+                        <DropdownMenuItem
+                          danger
+                          onSelect={() => setPending({ kind: 'drop', column })}
+                        >
                           <Trash2 /> Drop column
                         </DropdownMenuItem>
                       </DropdownMenuContent>

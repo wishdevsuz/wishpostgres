@@ -39,12 +39,18 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
     async (connection: SavedConnection) => {
       const status = useConnectionStore.getState().statusOf(connection.id);
       if (status === 'online') {
-        setActive(connection.id, useConnectionStore.getState().servers[connection.id]?.currentDatabase ?? null);
+        setActive(
+          connection.id,
+          useConnectionStore.getState().servers[connection.id]?.currentDatabase ?? null,
+        );
         return;
       }
       try {
         const server = await connect(connection.id);
-        notify.success(`Connected to ${connection.name}`, `${server.currentUser} · ${server.currentDatabase}`);
+        notify.success(
+          `Connected to ${connection.name}`,
+          `${server.currentUser} · ${server.currentDatabase}`,
+        );
       } catch (error) {
         notify.failure(error, `Could not connect to ${connection.name}`);
       }
@@ -88,7 +94,10 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
   const handleTest = useCallback(async (connection: SavedConnection) => {
     try {
       const server = await api.test(connection);
-      notify.success('Connection works', `PostgreSQL ${server.version.split(' ')[1] ?? ''} · ${server.currentUser}`);
+      notify.success(
+        'Connection works',
+        `PostgreSQL ${server.version.split(' ')[1] ?? ''} · ${server.currentUser}`,
+      );
     } catch (error) {
       notify.failure(error, 'Test failed');
     }
@@ -119,7 +128,12 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
       count={list.length}
       actions={
         <Tooltip content="New connection" shortcut="Ctrl N">
-          <Button variant="ghost" size="iconXs" onClick={() => editConnection(null)} aria-label="New connection">
+          <Button
+            variant="ghost"
+            size="iconXs"
+            onClick={() => editConnection(null)}
+            aria-label="New connection"
+          >
             <Plus />
           </Button>
         </Tooltip>
@@ -149,7 +163,9 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
                     label={
                       <span className="flex items-center gap-1.5">
                         {connection.name}
-                        {connection.favorite && <Star className="size-3 fill-caution text-caution" />}
+                        {connection.favorite && (
+                          <Star className="size-3 fill-caution text-caution" />
+                        )}
                       </span>
                     }
                     meta={status === 'online' ? undefined : STATUS_LABEL[status]}
@@ -191,7 +207,12 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
 
       {ordered.length === 0 && (
         <div className="px-1 pb-1 pt-1">
-          <Button variant="subtle" size="sm" className="w-full" onClick={() => editConnection(null)}>
+          <Button
+            variant="subtle"
+            size="sm"
+            className="w-full"
+            onClick={() => editConnection(null)}
+          >
             <Database /> Add a connection
           </Button>
         </div>
