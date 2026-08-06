@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=WishPostgres
+GenericName=PostgreSQL Client
+Comment=A fast, lightweight PostgreSQL desktop manager
+Exec=wishpostgres %U
+Icon=wishpostgres
+Terminal=false
+StartupNotify=true
+StartupWMClass=wishpostgres
+Categories=Development;Database;GTK;
+Keywords=postgres;postgresql;sql;database;db;query;

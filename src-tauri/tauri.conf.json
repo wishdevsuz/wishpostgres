@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Postgres Lite",
+  "productName": "wishpostgres",
   "version": "1.0.0",
-  "identifier": "dev.postgreslite.app",
+  "identifier": "dev.wishpostgres.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Postgres Lite",
+        "title": "WishPostgres",
         "width": 1440,
         "height": 900,
         "minWidth": 900,
@@ -41,11 +41,17 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "A fast, lightweight PostgreSQL desktop manager",
-    "longDescription": "Postgres Lite is a modern, lightweight desktop client for PostgreSQL: browse and edit data, design tables, run SQL, import and export, and back up databases.",
+    "longDescription": "WishPostgres is a modern, lightweight desktop client for PostgreSQL: browse and edit data, design tables, run SQL, import and export, and back up databases.",
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
-        "section": "database"
+        "section": "database",
+        "desktopTemplate": "wishpostgres.desktop"
+      },
+      "rpm": {
+        "desktopTemplate": "wishpostgres.desktop"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
       }
     }
   }
