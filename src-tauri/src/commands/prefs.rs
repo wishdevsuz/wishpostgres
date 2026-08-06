@@ -12,7 +12,9 @@ pub fn get_settings(state: State<'_, AppState>) -> AppResult<AppSettings> {
 #[tauri::command]
 pub fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> AppResult<AppSettings> {
     if settings.rows_per_page == 0 || settings.rows_per_page > 10_000 {
-        return Err(AppError::invalid("rows per page must be between 1 and 10000"));
+        return Err(AppError::invalid(
+            "rows per page must be between 1 and 10000",
+        ));
     }
     state.storage.save_settings(&settings)?;
     Ok(settings)

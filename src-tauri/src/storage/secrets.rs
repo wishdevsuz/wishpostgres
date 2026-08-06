@@ -12,6 +12,7 @@
 //! says so explicitly when it is in use.
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -24,7 +25,7 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{AppError, AppResult};
 
-const SERVICE: &str = "dev.postgreslite.app";
+const SERVICE: &str = "dev.wishpostgres.app";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +43,9 @@ struct Vault {
 pub struct SecretStore {
     path: PathBuf,
     backend: Mutex<Option<SecretBackend>>,
+    /// Serialises the read-modify-write of the vault so two connections saved
+    /// at the same time cannot drop one another's entry.
+    exclusive: Mutex<()>,
 }
 
 impl SecretStore {
@@ -49,6 +53,7 @@ impl SecretStore {
         Self {
             path: directory.join("credentials.enc"),
             backend: Mutex::new(None),
+            exclusive: Mutex::new(()),
         }
     }
 
@@ -113,12 +118,16 @@ impl SecretStore {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&self.path, serde_json::to_string_pretty(vault)?)?;
-        restrict_permissions(&self.path)?;
+        // Created 0600 up front rather than chmod-ed afterwards: between the
+        // write and the chmod the ciphertext would briefly be world readable.
+        let mut file = create_private(&self.path)?;
+        file.write_all(serde_json::to_string_pretty(vault)?.as_bytes())?;
+        file.sync_all()?;
         Ok(())
     }
 
     fn write_fallback(&self, connection_id: &str, password: Option<&str>) -> AppResult<()> {
+        let _guard = self.exclusive.lock();
         let mut vault = self.load_vault()?;
         match password {
             Some(secret) => {
@@ -176,7 +185,7 @@ fn keyring_entry(connection_id: &str) -> Result<keyring::Entry, keyring::Error> 
 fn cipher(salt: &str) -> AppResult<XChaCha20Poly1305> {
     let mut hasher = Sha256::new();
     hasher.update(machine_identity().as_bytes());
-    hasher.update(b"postgres-lite-credential-vault-v1");
+    hasher.update(b"wishpostgres-credential-vault-v1");
     hasher.update(salt.as_bytes());
     let key = hasher.finalize();
     XChaCha20Poly1305::new_from_slice(&key)
@@ -200,18 +209,25 @@ fn random_bytes<const N: usize>() -> [u8; N] {
     buffer
 }
 
+/// Open `path` for writing, truncated, readable and writable only by this user.
 #[cfg(unix)]
-fn restrict_permissions(path: &std::path::Path) -> AppResult<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut permissions = std::fs::metadata(path)?.permissions();
-    permissions.set_mode(0o600);
-    std::fs::set_permissions(path, permissions)?;
-    Ok(())
+fn create_private(path: &std::path::Path) -> AppResult<std::fs::File> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    // `mode` only applies when the file is created, so tighten an existing one
+    // that a previous version may have left readable.
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    Ok(file)
 }
 
 #[cfg(not(unix))]
-fn restrict_permissions(_path: &std::path::Path) -> AppResult<()> {
-    Ok(())
+fn create_private(path: &std::path::Path) -> AppResult<std::fs::File> {
+    Ok(std::fs::File::create(path)?)
 }
 
 #[cfg(test)]

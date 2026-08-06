@@ -64,7 +64,12 @@ pub async fn test_connection(
     state: State<'_, AppState>,
     draft: ConnectionDraft,
 ) -> AppResult<ServerInfo> {
-    let stored = state.storage.secrets.get(&draft.connection.id).ok().flatten();
+    let stored = state
+        .storage
+        .secrets
+        .get(&draft.connection.id)
+        .ok()
+        .flatten();
     let password = draft.password.filter(|value| !value.is_empty()).or(stored);
     let target = draft.connection.to_target(password, None);
     Ok(SessionManager::probe(&target).await?)
