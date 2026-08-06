@@ -1,0 +1,216 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (for example v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Linux bundles
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Read version
+        id: meta
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building WishPostgres $version"
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev build-essential curl wget file patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Verify before shipping
+        run: |
+          npm run typecheck
+          npm run lint
+          cargo test --workspace --manifest-path src-tauri/Cargo.toml
+
+      - name: Build bundles
+        run: npm run tauri build
+
+      # The bundlers name their output differently (`WishPostgres` for the
+      # AppImage, `wishpostgres` for the packages), so everything is collected
+      # and renamed to one predictable scheme before it is uploaded.
+      - name: Collect artifacts
+        id: collect
+        run: |
+          set -euo pipefail
+          version="${{ steps.meta.outputs.version }}"
+          bundle=src-tauri/target/release/bundle
+          mkdir -p dist-release
+
+          cp "$(find "$bundle/deb" -name '*.deb' | head -1)" \
+            "dist-release/wishpostgres_${version}_amd64.deb"
+          cp "$(find "$bundle/rpm" -name '*.rpm' | head -1)" \
+            "dist-release/wishpostgres-${version}-1.x86_64.rpm"
+          cp "$(find "$bundle/appimage" -name '*.AppImage' | head -1)" \
+            "dist-release/WishPostgres-${version}-x86_64.AppImage"
+
+          # A plain binary for people who would rather not install a package.
+          install -Dm755 src-tauri/target/release/wishpostgres \
+            "staging/wishpostgres-${version}/wishpostgres"
+          cp LICENSE README.md "staging/wishpostgres-${version}/"
+          tar -czf "dist-release/wishpostgres-${version}-x86_64-linux.tar.gz" \
+            -C staging "wishpostgres-${version}"
+
+          cd dist-release
+          sha256sum ./* > SHA256SUMS
+          ls -lh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundles
+          path: dist-release/
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-bundles
+          path: dist-release
+
+      - name: Compose release notes
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: bash scripts/release-notes.sh > release-notes.md
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: WishPostgres ${{ needs.build.outputs.version }}
+          body_path: release-notes.md
+          files: dist-release/*
+          draft: false
+          prerelease: false
+
+  apt:
+    name: Publish APT repository
+    needs: [build, publish]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      # `secrets` cannot be read from a step-level `if`, so the presence of the
+      # signing key is resolved once here, at job level, where it can be.
+      HAS_SIGNING_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-bundles
+          path: dist-release
+
+      - name: Fetch the existing repository
+        run: |
+          # `apt-ftparchive` indexes whatever is in the pool, so previous
+          # releases have to be carried forward or `apt` would lose them.
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null 2>&1; then
+            git clone --branch gh-pages --depth 1 \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
+          else
+            mkdir -p pages
+          fi
+
+      - name: Rebuild the package indexes
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y apt-utils
+
+          pool=pages/apt/pool/main/w/wishpostgres
+          dist=pages/apt/dists/stable/main/binary-amd64
+          mkdir -p "$pool" "$dist"
+          cp dist-release/*.deb "$pool/"
+
+          cd pages/apt
+          apt-ftparchive packages pool > dists/stable/main/binary-amd64/Packages
+          gzip -9fk dists/stable/main/binary-amd64/Packages
+
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=WishPostgres \
+            -o APT::FTPArchive::Release::Label=WishPostgres \
+            -o APT::FTPArchive::Release::Suite=stable \
+            -o APT::FTPArchive::Release::Codename=stable \
+            -o APT::FTPArchive::Release::Architectures=amd64 \
+            -o APT::FTPArchive::Release::Components=main \
+            release dists/stable > dists/stable/Release
+
+      - name: Sign the repository
+        if: env.HAS_SIGNING_KEY == 'true'
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          echo "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          key=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+
+          cd pages/apt
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "${APT_GPG_PASSPHRASE:-}" --default-key "$key" \
+            -abs -o dists/stable/Release.gpg dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "${APT_GPG_PASSPHRASE:-}" --default-key "$key" \
+            --clearsign -o dists/stable/InRelease dists/stable/Release
+
+          # The key users add to /etc/apt/keyrings.
+          gpg --export "$key" > ../wishpostgres.gpg
+
+      - name: Add the landing page and installer
+        run: |
+          cp scripts/install.sh pages/install.sh
+          cp docs/pages/index.html pages/index.html 2>/dev/null || true
+          touch pages/.nojekyll
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ github.token }}
+          publish_dir: pages
+          publish_branch: gh-pages
+          keep_files: true
+          commit_message: "apt: publish ${{ needs.build.outputs.version }}"
