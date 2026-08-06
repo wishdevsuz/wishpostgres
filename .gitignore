@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+dist-release
 *.local
 .DS_Store
 .vscode/*
@@ -8,4 +9,6 @@ dist-ssr
 .idea
 src-tauri/target
 src-tauri/gen
-package-lock.json
+
+# package-lock.json is deliberately tracked: `npm ci` needs it, and a release
+# should install the exact dependency tree that was tested.
