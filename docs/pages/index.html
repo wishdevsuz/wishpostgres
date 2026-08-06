@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WishPostgres — install</title>
+    <meta
+      name="description"
+      content="A fast, lightweight PostgreSQL desktop manager for Linux. Install with apt or a single command."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #16191d;
+        --muted: #5c6570;
+        --line: #e3e7ec;
+        --card: #f7f8fa;
+        --accent: #2f6df6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0d10;
+          --fg: #e8ecf1;
+          --muted: #97a1ad;
+          --line: #1e242c;
+          --card: #12161b;
+          --accent: #6d9bff;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 4rem 1.25rem 6rem;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.65 system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 46rem;
+        margin: 0 auto;
+      }
+      header {
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+      h1 {
+        font-size: 2.25rem;
+        margin: 0 0 0.5rem;
+        letter-spacing: -0.02em;
+      }
+      .tagline {
+        color: var(--muted);
+        margin: 0;
+        font-size: 1.1rem;
+      }
+      h2 {
+        font-size: 1.05rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 2.5rem 0 0.75rem;
+      }
+      pre {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 1rem 1.1rem;
+        overflow-x: auto;
+        font-size: 0.875rem;
+        margin: 0 0 0.75rem;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      p {
+        margin: 0 0 1rem;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      a {
+        color: var(--accent);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.55rem 0.5rem;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      footer {
+        margin-top: 3.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.875rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>WishPostgres</h1>
+        <p class="tagline">
+          A fast, lightweight PostgreSQL desktop manager for Linux.
+        </p>
+      </header>
+
+      <h2>Install anywhere</h2>
+      <pre><code>curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/install.sh | bash</code></pre>
+      <p class="note">
+        Detects your distribution, verifies the download against the published
+        checksums and installs the right package.
+        <a href="install.sh">Read the script first</a> if you would rather not
+        pipe it into a shell.
+      </p>
+
+      <h2>Debian, Ubuntu and derivatives</h2>
+      <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/wishpostgres.gpg \
+  | sudo tee /etc/apt/keyrings/wishpostgres.gpg &gt; /dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/wishpostgres.gpg] https://wishdevsuz.github.io/wish-pgAdmin/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/wishpostgres.list &gt; /dev/null
+sudo apt update
+sudo apt install wishpostgres</code></pre>
+      <p class="note">
+        Added once, <code>apt upgrade</code> keeps WishPostgres current with the
+        rest of your system.
+      </p>
+
+      <h2>Fedora, RHEL, openSUSE</h2>
+      <pre><code>sudo dnf install https://github.com/wishdevsuz/wish-pgAdmin/releases/latest/download/wishpostgres-1.0.0-1.x86_64.rpm</code></pre>
+
+      <h2>What you need</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>glibc</th>
+            <td>2.35 or newer — Ubuntu 22.04+, Debian 12+, Fedora 36+</td>
+          </tr>
+          <tr>
+            <th>WebKitGTK</th>
+            <td>4.1, installed automatically by the package</td>
+          </tr>
+          <tr>
+            <th>PostgreSQL</th>
+            <td>12 or newer, on the server side</td>
+          </tr>
+          <tr>
+            <th>Optional</th>
+            <td><code>pg_dump</code> and <code>psql</code>, for backup and restore</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <footer>
+        <a href="https://github.com/wishdevsuz/wish-pgAdmin">Source</a> ·
+        <a href="https://github.com/wishdevsuz/wish-pgAdmin/releases">Releases</a>
+        ·
+        <a href="https://github.com/wishdevsuz/wish-pgAdmin/issues">Issues</a>
+        · MIT
+      </footer>
+    </main>
+  </body>
+</html>
