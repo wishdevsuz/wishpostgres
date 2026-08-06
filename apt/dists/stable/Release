@@ -1,0 +1,23 @@
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Thu, 06 Aug 2026 09:36:45 +0000
+Label: WishPostgres
+Origin: WishPostgres
+Suite: stable
+MD5Sum:
+ 6aacae7a69b5ccbbca96baa57b12a082              148 Release
+ f3dc229f58d6d37865ef80f96e3fba67              776 main/binary-amd64/Packages
+ 5b7e2e315bdcdc987b30bb32fa45c748              526 main/binary-amd64/Packages.gz
+SHA1:
+ 419a24843978a44f04bd762334d3d3f885a516cc              148 Release
+ 3cd8e2f5dbf8b16be3ede241f75eaf7b14e0a1f1              776 main/binary-amd64/Packages
+ baf5cd19268b697370ca5b0075a02af10693fcd2              526 main/binary-amd64/Packages.gz
+SHA256:
+ ecbe3d3ca26ff540d388be2a3db6eea582d7e5f6740390d3b84e6382e2521649              148 Release
+ 408ca9e543e5c586b3fa74bcd0dd04f97383cc8315bfd6ca32135a56d224722c              776 main/binary-amd64/Packages
+ 2ec0dc44600171372476b7d4ba0ead9c1e6433dcbe766333436969d7718ff293              526 main/binary-amd64/Packages.gz
+SHA512:
+ 30e219cedc2238a99ad48066d753136eead7b65a2edfe65b8d415899f86ae37fe49f1ee048f809bc7f4db9da232e7c549a73dd6556a6e8983a9ecaa65aa6d9f0              148 Release
+ bc788b657dd59f8cdce4a421f13aa1aa5f304507d8f8a0f41696619c05743f04802ffb1c69440fc7d44c949d62632ec79739d3ef087049bc2cd2b912bb42fe88              776 main/binary-amd64/Packages
+ c1567a1363baa2fd8c2abdc10d9d0b1c35d41139b610d66715970254bac42f4e93505f1bdbc0b9693092208d2fd5ffdadf93d19c267666ae339f5cdf236424c1              526 main/binary-amd64/Packages.gz
