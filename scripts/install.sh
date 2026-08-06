@@ -18,12 +18,18 @@ set -euo pipefail
 REPO="wishdevsuz/wish-pgAdmin"
 PREFIX="${WISHPOSTGRES_PREFIX:-$HOME/.local/bin}"
 
-BOLD=$'\033[1m'
-DIM=$'\033[2m'
-RED=$'\033[31m'
-GREEN=$'\033[32m'
-YELLOW=$'\033[33m'
-RESET=$'\033[0m'
+# Colour only when stdout is a terminal, so redirecting the installer into a
+# log leaves readable text rather than escape sequences.
+if [ -t 1 ]; then
+  BOLD=$'\033[1m'
+  DIM=$'\033[2m'
+  RED=$'\033[31m'
+  GREEN=$'\033[32m'
+  YELLOW=$'\033[33m'
+  RESET=$'\033[0m'
+else
+  BOLD='' DIM='' RED='' GREEN='' YELLOW='' RESET=''
+fi
 
 say() { printf '%s\n' "${BOLD}==>${RESET} $*"; }
 note() { printf '%s\n' "    ${DIM}$*${RESET}"; }
