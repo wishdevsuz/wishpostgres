@@ -213,8 +213,36 @@ jobs:
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
         run: |
           set -euo pipefail
-          echo "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+
+          # The secret is taken either as the armored private key or as base64
+          # of it. An armored block pasted into a secret loses its line breaks
+          # often enough that handling both is worth it, and a secret that is
+          # neither fails here naming the cause rather than four lines deep in
+          # gpg with "no valid OpenPGP data found".
+          printf '%s' "$APT_GPG_PRIVATE_KEY" > "$RUNNER_TEMP/key.in"
+          if grep -q 'BEGIN PGP PRIVATE KEY BLOCK' "$RUNNER_TEMP/key.in"; then
+            cp "$RUNNER_TEMP/key.in" "$RUNNER_TEMP/key.asc"
+          elif base64 -d < "$RUNNER_TEMP/key.in" > "$RUNNER_TEMP/key.asc" 2>/dev/null &&
+            grep -q 'BEGIN PGP PRIVATE KEY BLOCK' "$RUNNER_TEMP/key.asc"; then
+            echo "Read the signing key from a base64 secret."
+          else
+            echo "::error::APT_GPG_PRIVATE_KEY is neither an armored private key \
+            nor base64 of one, so the repository cannot be signed. Set it with: \
+            gpg --export-secret-keys --armor <KEY_ID> | base64 -w0 | \
+            gh secret set APT_GPG_PRIVATE_KEY"
+            exit 1
+          fi
+
+          gpg --batch --import "$RUNNER_TEMP/key.asc"
+          shred -u "$RUNNER_TEMP/key.in" "$RUNNER_TEMP/key.asc"
+
           key=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+          if [ -z "$key" ]; then
+            echo "::error::the secret imported but left no secret key behind — \
+            APT_GPG_PRIVATE_KEY looks like a public key rather than a private one"
+            exit 1
+          fi
+          echo "Signing with $key."
 
           cd pages/apt
           gpg --batch --yes --pinentry-mode loopback \

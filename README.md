@@ -280,17 +280,29 @@ tarball, writes `SHA256SUMS`, publishes the GitHub release with notes assembled
 from `CHANGELOG.md`, and refreshes the APT repository on the `gh-pages` branch.
 
 Signing the APT repository needs two repository secrets. Without them the
-release still publishes; only the `apt` route needs a signature.
+release still publishes; only the `apt` route needs a signature, and `apt`
+refuses an unsigned repository.
 
 ```bash
+# Once, to create a signing key:
 gpg --quick-generate-key "WishPostgres <you@example.com>" rsa4096 sign never
-gpg --armor --export-secret-keys you@example.com   # → secret APT_GPG_PRIVATE_KEY
+
+# Then, to hand it to Actions. Base64 because pasting an armoured block into
+# the secrets form loses its line breaks, and gpg then reports only
+# "no valid OpenPGP data found":
+key=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+gpg --export-secret-keys --armor "$key" | base64 -w0 |
+  gh secret set APT_GPG_PRIVATE_KEY
+gh secret set APT_GPG_PASSPHRASE      # paste the key's passphrase
 ```
 
 | Secret | Value |
 | --- | --- |
-| `APT_GPG_PRIVATE_KEY` | The armoured private key printed above |
+| `APT_GPG_PRIVATE_KEY` | The armoured private key, or base64 of it |
 | `APT_GPG_PASSPHRASE` | Its passphrase, or empty if it has none |
+
+The release workflow refuses to publish a repository it could not sign, so a
+bad secret fails the run rather than shipping something `apt` will reject.
 
 GitHub Pages must be set to serve from the `gh-pages` branch for the `apt` route
 and the install script to be reachable.
