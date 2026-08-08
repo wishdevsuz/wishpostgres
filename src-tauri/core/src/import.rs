@@ -351,11 +351,25 @@ fn format_number(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::temp_file;
+
+    fn csv(name: &str, body: &str) -> String {
+        temp_file(&format!("{name}.csv"), body)
+    }
+
+    // ---------------------------------------------------------- small helpers
 
     #[test]
     fn formats_whole_floats_as_integers() {
         assert_eq!(format_number(42.0), "42");
         assert_eq!(format_number(42.5), "42.5");
+    }
+
+    #[test]
+    fn formats_negative_and_zero_numbers() {
+        assert_eq!(format_number(0.0), "0");
+        assert_eq!(format_number(-7.0), "-7");
+        assert_eq!(format_number(-7.25), "-7.25");
     }
 
     #[test]
@@ -369,11 +383,237 @@ mod tests {
     }
 
     #[test]
+    fn a_batch_is_never_zero_rows() {
+        for columns in [1usize, 10, 100, 1000, 10_000, 65_535, 100_000] {
+            assert!(batch_rows(columns) >= 1, "{columns} columns gave no rows");
+        }
+    }
+
+    #[test]
     fn empty_cells_become_null() {
         let cells = to_cells(["a", "", "c"].into_iter());
         assert_eq!(
             cells,
             vec![Some("a".to_string()), None, Some("c".to_string())]
         );
+    }
+
+    #[test]
+    fn whitespace_is_a_value_not_a_null() {
+        assert_eq!(to_cells([" "].into_iter()), vec![Some(" ".to_string())]);
+    }
+
+    // ------------------------------------------------------------------- CSV
+
+    #[test]
+    fn reads_a_header_and_rows() {
+        let path = csv("basic", "id,name\n1,ann\n2,bo\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+        assert_eq!(preview.total_rows, 2);
+        assert_eq!(preview.rows[0], vec![Some("1".into()), Some("ann".into())]);
+    }
+
+    #[test]
+    fn without_a_header_the_columns_are_numbered() {
+        let path = csv("headerless", "1,ann\n2,bo\n");
+        let preview = preview(&path, false, Some(",")).unwrap();
+        assert_eq!(preview.columns, vec!["column1", "column2"]);
+        assert_eq!(preview.total_rows, 2);
+    }
+
+    #[test]
+    fn header_names_are_trimmed() {
+        let path = csv("padded", " id , name \n1,ann\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+    }
+
+    #[test]
+    fn a_semicolon_delimiter_is_honoured() {
+        let path = csv("semi", "id;name\n1;ann\n");
+        let preview = preview(&path, true, Some(";")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+    }
+
+    #[test]
+    fn a_tab_delimiter_is_honoured() {
+        let path = csv("tab", "id\tname\n1\tann\n");
+        let preview = preview(&path, true, Some("\t")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+    }
+
+    #[test]
+    fn a_pipe_delimiter_is_honoured() {
+        let path = csv("pipe", "id|name\n1|ann\n");
+        let preview = preview(&path, true, Some("|")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+    }
+
+    #[test]
+    fn the_delimiter_defaults_to_a_comma() {
+        let path = csv("default", "id,name\n1,ann\n");
+        let preview = preview(&path, true, None).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+    }
+
+    #[test]
+    fn quoted_fields_may_contain_the_delimiter_and_newlines() {
+        let path = csv("quoted", "id,note\n1,\"a,b\"\n2,\"line1\nline2\"\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.rows[0][1], Some("a,b".into()));
+        assert_eq!(preview.rows[1][1], Some("line1\nline2".into()));
+    }
+
+    #[test]
+    fn doubled_quotes_inside_a_field_are_unescaped() {
+        let path = csv("escaped", "id,note\n1,\"it\"\"s\"\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.rows[0][1], Some("it\"s".into()));
+    }
+
+    #[test]
+    fn empty_fields_read_back_as_null() {
+        let path = csv("blank", "id,note\n1,\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.rows[0][1], None);
+    }
+
+    #[test]
+    fn ragged_rows_are_tolerated() {
+        let path = csv("ragged", "a,b,c\n1,2\n3,4,5,6\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.total_rows, 2);
+        assert_eq!(preview.rows[0].len(), 2);
+        assert_eq!(preview.rows[1].len(), 4);
+    }
+
+    #[test]
+    fn an_empty_file_reads_as_nothing() {
+        let path = csv("empty", "");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert!(preview.columns.is_empty());
+        assert_eq!(preview.total_rows, 0);
+    }
+
+    #[test]
+    fn a_header_only_file_has_columns_but_no_rows() {
+        let path = csv("header-only", "id,name\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+        assert_eq!(preview.total_rows, 0);
+    }
+
+    #[test]
+    fn a_missing_file_is_reported() {
+        assert!(preview("/no/such/file.csv", true, Some(",")).is_err());
+    }
+
+    // ------------------------------------------------------------- previews
+
+    #[test]
+    fn the_preview_is_capped_and_says_so() {
+        let mut body = String::from("id\n");
+        for n in 0..(PREVIEW_ROWS + 25) {
+            body.push_str(&format!("{n}\n"));
+        }
+        let path = csv("long", &body);
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.rows.len(), PREVIEW_ROWS);
+        assert_eq!(preview.total_rows, PREVIEW_ROWS + 25);
+        assert!(preview.truncated);
+    }
+
+    #[test]
+    fn a_short_file_is_not_marked_truncated() {
+        let path = csv("short", "id\n1\n2\n");
+        assert!(!preview(&path, true, Some(",")).unwrap().truncated);
+    }
+
+    // ------------------------------------------------------------------ JSON
+
+    #[test]
+    fn reads_an_array_of_objects() {
+        let path = temp_file(
+            "array.json",
+            r#"[{"id":1,"name":"ann"},{"id":2,"name":"bo"}]"#,
+        );
+        let preview = preview(&path, true, None).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+        assert_eq!(preview.total_rows, 2);
+        assert_eq!(preview.rows[0][0], Some("1".into()));
+    }
+
+    #[test]
+    fn a_lone_object_is_read_as_one_row() {
+        let path = temp_file("single.json", r#"{"id":1}"#);
+        let preview = preview(&path, true, None).unwrap();
+        assert_eq!(preview.total_rows, 1);
+    }
+
+    #[test]
+    fn json_columns_are_the_union_of_every_object() {
+        let path = temp_file("union.json", r#"[{"a":1},{"b":2}]"#);
+        let preview = preview(&path, true, None).unwrap();
+        assert_eq!(preview.columns, vec!["a", "b"]);
+        assert_eq!(preview.rows[0][1], None);
+        assert_eq!(preview.rows[1][0], None);
+    }
+
+    #[test]
+    fn json_nulls_and_nested_values() {
+        let path = temp_file(
+            "nested.json",
+            r#"[{"a":null,"b":{"x":1},"c":[1,2],"d":true}]"#,
+        );
+        let preview = preview(&path, true, None).unwrap();
+        let row = &preview.rows[0];
+        assert_eq!(row[0], None);
+        assert_eq!(row[1], Some("{\"x\":1}".into()));
+        assert_eq!(row[2], Some("[1,2]".into()));
+        assert_eq!(row[3], Some("true".into()));
+    }
+
+    #[test]
+    fn json_strings_keep_their_text_rather_than_their_quotes() {
+        let path = temp_file("strings.json", r#"[{"a":"hello"}]"#);
+        assert_eq!(
+            preview(&path, true, None).unwrap().rows[0][0],
+            Some("hello".into())
+        );
+    }
+
+    #[test]
+    fn a_json_scalar_is_refused() {
+        let path = temp_file("scalar.json", "42");
+        assert!(preview(&path, true, None).is_err());
+    }
+
+    #[test]
+    fn a_json_array_without_objects_is_refused() {
+        let path = temp_file("flat.json", "[1,2,3]");
+        assert!(preview(&path, true, None).is_err());
+    }
+
+    #[test]
+    fn malformed_json_is_reported() {
+        let path = temp_file("broken.json", "{not json");
+        assert!(preview(&path, true, None).is_err());
+    }
+
+    // -------------------------------------------------------- unknown suffix
+
+    #[test]
+    fn an_unknown_extension_is_read_as_delimited_text() {
+        let path = temp_file("data.dat", "id,name\n1,ann\n");
+        let preview = preview(&path, true, Some(",")).unwrap();
+        assert_eq!(preview.columns, vec!["id", "name"]);
+    }
+
+    #[test]
+    fn a_txt_file_is_read_as_delimited_text() {
+        let path = temp_file("notes.txt", "a|b\n1|2\n");
+        let preview = preview(&path, true, Some("|")).unwrap();
+        assert_eq!(preview.columns, vec!["a", "b"]);
     }
 }

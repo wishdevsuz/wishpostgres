@@ -4,7 +4,7 @@ use deadpool_postgres::Client;
 use futures_util::{pin_mut, TryStreamExt};
 use serde_json::Value;
 
-use crate::error::CoreResult;
+use crate::error::{CoreError, CoreResult};
 use crate::models::{QueryResult, ResultColumn, TypeCategory};
 use crate::value::{friendly_type_name, PgJson};
 
@@ -96,9 +96,7 @@ pub fn split_statements(sql: &str) -> Vec<String> {
             }
             ';' => {
                 index += 1;
-                if !current.trim().is_empty() {
-                    statements.push(current.trim().to_string());
-                }
+                push_statement(&mut statements, &current);
                 current.clear();
             }
             _ => {
@@ -108,10 +106,57 @@ pub fn split_statements(sql: &str) -> Vec<String> {
         }
     }
 
-    if !current.trim().is_empty() {
-        statements.push(current.trim().to_string());
-    }
+    push_statement(&mut statements, &current);
     statements
+}
+
+/// Keep a chunk only when it contains SQL.
+///
+/// A run of comments between two semicolons is not a statement: sending it on
+/// would have PostgreSQL answer with an empty query response the user has no
+/// way to interpret.
+fn push_statement(statements: &mut Vec<String>, chunk: &str) {
+    let trimmed = chunk.trim();
+    if !trimmed.is_empty() && !is_only_comments(trimmed) {
+        statements.push(trimmed.to_string());
+    }
+}
+
+/// Whether a chunk is nothing but comments and whitespace.
+fn is_only_comments(sql: &str) -> bool {
+    let chars: Vec<char> = sql.chars().collect();
+    let mut index = 0usize;
+    let mut block_depth = 0usize;
+
+    while index < chars.len() {
+        if block_depth > 0 {
+            if chars[index] == '*' && chars.get(index + 1) == Some(&'/') {
+                block_depth -= 1;
+                index += 2;
+            } else if chars[index] == '/' && chars.get(index + 1) == Some(&'*') {
+                block_depth += 1;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+
+        match chars[index] {
+            c if c.is_whitespace() => index += 1,
+            '-' if chars.get(index + 1) == Some(&'-') => {
+                while index < chars.len() && chars[index] != '\n' {
+                    index += 1;
+                }
+            }
+            '/' if chars.get(index + 1) == Some(&'*') => {
+                block_depth = 1;
+                index += 2;
+            }
+            _ => return false,
+        }
+    }
+    true
 }
 
 /// Read a dollar-quote opening tag such as `$$` or `$body$` at `start`.
@@ -331,7 +376,7 @@ where
 pub async fn execute_script(client: &Client, sql: &str) -> CoreResult<Vec<QueryResult>> {
     let statements = split_statements(sql);
     if statements.is_empty() {
-        return Ok(Vec::new());
+        return Err(CoreError::Invalid("there is nothing to run".into()));
     }
 
     let mut results = Vec::with_capacity(statements.len());
@@ -420,5 +465,159 @@ mod tests {
     fn extracts_command_keyword() {
         assert_eq!(leading_keyword("  select * from t"), "SELECT");
         assert_eq!(leading_keyword("INSERT INTO t VALUES (1)"), "INSERT");
+    }
+
+    // ------------------------------------------------- split_statements edges
+
+    #[test]
+    fn an_empty_script_yields_nothing() {
+        assert!(split_statements("").is_empty());
+        assert!(split_statements("   \n\t  ").is_empty());
+        assert!(split_statements(";;;").is_empty());
+    }
+
+    #[test]
+    fn a_statement_without_a_terminator_still_counts() {
+        assert_eq!(split_statements("SELECT 1"), vec!["SELECT 1"]);
+    }
+
+    #[test]
+    fn trailing_whitespace_is_trimmed_from_each_statement() {
+        assert_eq!(
+            split_statements("  SELECT 1  ;   SELECT 2  "),
+            vec!["SELECT 1", "SELECT 2"]
+        );
+    }
+
+    #[test]
+    fn a_comment_only_script_yields_nothing() {
+        assert!(split_statements("-- just a note").is_empty());
+        assert!(split_statements("/* just a note */").is_empty());
+    }
+
+    #[test]
+    fn double_quoted_identifiers_can_contain_a_semicolon() {
+        let parts = split_statements("SELECT * FROM \"od;d\"; SELECT 2");
+        assert_eq!(parts.len(), 2);
+        assert!(parts[0].contains("\"od;d\""));
+    }
+
+    #[test]
+    fn a_dollar_quote_tag_must_match_to_close() {
+        let parts = split_statements("SELECT $a$ x; $b$ y; $a$; SELECT 2");
+        assert_eq!(parts.len(), 2);
+    }
+
+    #[test]
+    fn an_unterminated_dollar_quote_swallows_the_rest() {
+        assert_eq!(split_statements("SELECT $$ a; b").len(), 1);
+    }
+
+    #[test]
+    fn an_unterminated_block_comment_swallows_the_rest() {
+        // "SELECT 1" stays; the dangling comment is not a statement of its own.
+        assert_eq!(split_statements("SELECT 1; /* a; b"), vec!["SELECT 1"]);
+        assert_eq!(split_statements("SELECT 1 /* a; b").len(), 1);
+    }
+
+    #[test]
+    fn comments_between_statements_are_dropped() {
+        assert_eq!(
+            split_statements("SELECT 1; -- note\n; SELECT 2"),
+            vec!["SELECT 1", "SELECT 2"]
+        );
+    }
+
+    #[test]
+    fn a_comment_attached_to_a_statement_is_kept_with_it() {
+        let parts = split_statements("-- why\nSELECT 1");
+        assert_eq!(parts.len(), 1);
+        assert!(parts[0].contains("-- why"));
+    }
+
+    #[test]
+    fn recognises_chunks_that_are_only_comments() {
+        assert!(is_only_comments(""));
+        assert!(is_only_comments("   \n  "));
+        assert!(is_only_comments("-- a note"));
+        assert!(is_only_comments("/* a note */"));
+        assert!(is_only_comments("/* outer /* inner */ still */"));
+        assert!(is_only_comments("-- one\n /* two */ \n-- three"));
+
+        assert!(!is_only_comments("SELECT 1"));
+        assert!(!is_only_comments("-- note\nSELECT 1"));
+        assert!(!is_only_comments("/* note */ SELECT 1"));
+    }
+
+    #[test]
+    fn a_line_comment_ends_at_the_newline() {
+        let parts = split_statements("SELECT 1; -- note\nSELECT 2");
+        assert_eq!(parts.len(), 2);
+    }
+
+    #[test]
+    fn many_statements_are_all_kept() {
+        let script = (1..=25)
+            .map(|n| format!("SELECT {n};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(split_statements(&script).len(), 25);
+    }
+
+    #[test]
+    fn a_dollar_sign_that_is_not_a_quote_is_ordinary() {
+        // `$1` is a parameter placeholder, not the start of a dollar quote.
+        let parts = split_statements("SELECT $1; SELECT 2");
+        assert_eq!(parts.len(), 2);
+    }
+
+    // ---------------------------------------------------- needs_simple_protocol
+
+    #[test]
+    fn more_transaction_hostile_statements_are_recognised() {
+        assert!(needs_simple_protocol("CLUSTER users"));
+        assert!(needs_simple_protocol("DROP INDEX CONCURRENTLY idx"));
+    }
+
+    #[test]
+    fn concurrently_further_along_the_statement_still_counts() {
+        assert!(needs_simple_protocol(
+            "CREATE UNIQUE INDEX CONCURRENTLY idx"
+        ));
+    }
+
+    #[test]
+    fn leading_whitespace_does_not_hide_the_keyword() {
+        assert!(needs_simple_protocol("\n\t  VACUUM users"));
+    }
+
+    #[test]
+    fn a_column_named_like_a_keyword_is_not_mistaken() {
+        assert!(!needs_simple_protocol("SELECT vacuum FROM t"));
+        assert!(!needs_simple_protocol("INSERT INTO t (cluster) VALUES (1)"));
+    }
+
+    // ------------------------------------------------------- leading_keyword
+
+    #[test]
+    fn the_command_keyword_is_upper_cased() {
+        assert_eq!(leading_keyword("select 1"), "SELECT");
+        assert_eq!(leading_keyword("  insert into t values (1)"), "INSERT");
+    }
+
+    #[test]
+    fn punctuation_around_the_keyword_is_stripped() {
+        assert_eq!(leading_keyword("(SELECT 1)"), "SELECT");
+    }
+
+    #[test]
+    fn an_empty_statement_reports_a_generic_command() {
+        assert_eq!(leading_keyword(""), "QUERY");
+        assert_eq!(leading_keyword("   "), "QUERY");
+    }
+
+    #[test]
+    fn a_leading_comment_is_skipped_when_finding_the_keyword() {
+        assert_eq!(leading_keyword("--note\nSELECT 1"), "SELECT");
     }
 }

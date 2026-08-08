@@ -98,6 +98,19 @@ pub async fn truncate_table(
 }
 
 #[tauri::command]
+pub async fn set_extension(
+    state: State<'_, AppState>,
+    connection_id: String,
+    database: String,
+    name: String,
+    action: String,
+) -> AppResult<String> {
+    let action: ddl::ExtensionAction = action.parse()?;
+    let client = state.client(&connection_id, &database).await?;
+    Ok(ddl::set_extension(&client, &name, action).await?)
+}
+
+#[tauri::command]
 pub async fn drop_relation(
     state: State<'_, AppState>,
     connection_id: String,

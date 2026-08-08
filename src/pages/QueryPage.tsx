@@ -1,17 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SQLNamespace } from '@codemirror/lang-sql';
-import { Eraser, History, Play, Plus, X, Zap } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { ChevronDown, Eraser, History, Pencil, Play, Plus, Save, X, Zap } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { PromptDialog } from '@/components/dialogs/PromptDialog';
 import { ResultPanel } from '@/components/sql/ResultPanel';
-import { SqlEditor } from '@/components/sql/SqlEditor';
+import { SqlEditor, type SqlEditorHandle } from '@/components/sql/SqlEditor';
 import { SavePanel } from '@/components/sql/SavePanel';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/menu';
 import { Separator, Tooltip } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
 import { useRelations, useScope } from '@/hooks/use-catalog';
 import { useShortcuts } from '@/hooks/use-shortcuts';
-import { catalog, sql as sqlApi } from '@/services/api';
+import { catalog, prefs, sql as sqlApi } from '@/services/api';
 import { useWorkspaceStore } from '@/state/workspace-store';
 import { notify } from '@/utils/notify';
 import type { QueryResult } from '@/types';
@@ -30,6 +37,8 @@ export function QueryPage() {
 
   const [results, setResults] = useState<QueryResult[]>([]);
   const [panel, setPanel] = useState<'results' | 'library'>('results');
+  const [prompt, setPrompt] = useState<'save' | 'rename' | null>(null);
+  const editor = useRef<SqlEditorHandle>(null);
 
   const tab = tabs.find((entry) => entry.id === activeTabId) ?? tabs[0] ?? null;
   const completions = useCompletions(schema);
@@ -46,15 +55,64 @@ export function QueryPage() {
       if (changed) {
         void queryClient.invalidateQueries({ queryKey: ['browse'] });
         void queryClient.invalidateQueries({ queryKey: ['relations'] });
+        void queryClient.invalidateQueries({ queryKey: ['columns'] });
       }
       void queryClient.invalidateQueries({ queryKey: ['history'] });
       const total = data.reduce((sum, result) => sum + result.durationMs, 0);
-      notify.success(`${data.length} statement${data.length === 1 ? '' : 's'} in ${total} ms`);
+      notify.success(
+        `${data.length} statement${data.length === 1 ? '' : 's'} in ${total} ms`,
+        summariseOutcome(data),
+      );
     },
     onError: (error) => {
       void queryClient.invalidateQueries({ queryKey: ['history'] });
       notify.failure(error, 'Query failed');
     },
+  });
+
+  const explain = useMutation({
+    mutationFn: async (analyze: boolean) => {
+      if (!connectionId || !database) throw new Error('Connect to a database first.');
+      const statement = editor.current?.currentStatement() || tab?.sql || '';
+      if (!statement.trim()) throw new Error('There is nothing to explain.');
+      const plan = await sqlApi.explain({ connectionId, database, sql: statement, analyze });
+      return { plan, analyze };
+    },
+    onSuccess: ({ plan, analyze }) => {
+      const lines = plan.split('\n');
+      setResults([
+        {
+          columns: [{ name: 'QUERY PLAN', dataType: 'text', typeCategory: 'text' }],
+          rows: lines.map((line) => [line]),
+          rowCount: lines.length,
+          affectedRows: null,
+          durationMs: 0,
+          command: analyze ? 'EXPLAIN ANALYZE' : 'EXPLAIN',
+          truncated: false,
+        },
+      ]);
+      setPanel('results');
+    },
+    onError: (error) => notify.failure(error, 'Could not explain the query'),
+  });
+
+  const saveQuery = useMutation({
+    mutationFn: (name: string) =>
+      prefs.saveQuery({
+        id: '',
+        name,
+        sql: tab?.sql ?? '',
+        description: null,
+        favorite: false,
+        createdAt: '',
+        updatedAt: '',
+      }),
+    onSuccess: (saved) => {
+      notify.success(`Saved as “${saved.name}”`);
+      void queryClient.invalidateQueries({ queryKey: ['saved-queries'] });
+      if (tab) updateTab(tab.id, { name: saved.name });
+    },
+    onError: (error) => notify.failure(error, 'Could not save the query'),
   });
 
   const execute = useCallback(
@@ -69,6 +127,18 @@ export function QueryPage() {
     [run, tab?.sql],
   );
 
+  const runCurrent = useCallback(() => {
+    execute(editor.current?.currentStatement() ?? null);
+  }, [execute]);
+
+  const requestSave = useCallback(() => {
+    if (!tab?.sql.trim()) {
+      notify.warn('There is nothing to save');
+      return;
+    }
+    setPrompt('save');
+  }, [tab?.sql]);
+
   useShortcuts(
     [
       {
@@ -78,12 +148,14 @@ export function QueryPage() {
         handler: () => tab && updateTab(tab.id, { sql: '' }),
       },
       { key: 'w', ctrl: true, allowInFields: true, handler: () => tab && closeTab(tab.id) },
-      { key: 't', ctrl: true, allowInFields: true, handler: () => addTab() },
+      { key: 's', ctrl: true, allowInFields: true, handler: requestSave },
     ],
     Boolean(tab),
   );
 
   if (!tab) return null;
+
+  const busy = run.isPending || explain.isPending;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -105,13 +177,20 @@ export function QueryPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab(entry.id)}
+                onDoubleClick={() => {
+                  setActiveTab(entry.id);
+                  setPrompt('rename');
+                }}
+                title={`${entry.name} — double click to rename`}
                 className="max-w-[160px] truncate"
               >
                 {entry.name}
+                {entry.sql.trim() !== '' && <span className="pl-1 text-accent">•</span>}
               </button>
               <button
                 type="button"
                 aria-label={`Close ${entry.name}`}
+                title={`Close ${entry.name}`}
                 onClick={() => closeTab(entry.id)}
                 className="flex size-4 items-center justify-center rounded text-ink-faint opacity-0 transition-opacity hover:bg-[#ffffff14] hover:text-ink group-hover/tab:opacity-100"
               >
@@ -134,66 +213,83 @@ export function QueryPage() {
       </div>
 
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-surface px-2">
-        <Tooltip content="Run the selection, or the whole tab" shortcut="Ctrl ⏎">
+        <Tooltip content="Run the selection, or the statement under the cursor" shortcut="Ctrl ⏎">
           <Button
             variant="primary"
             size="sm"
             disabled={!ready}
             loading={run.isPending}
-            onClick={() => execute(null)}
+            onClick={runCurrent}
           >
             <Play />
             Run
           </Button>
         </Tooltip>
-        <Tooltip content="Run every statement" shortcut="Ctrl ⇧ ⏎">
-          <Button variant="secondary" size="sm" disabled={!ready} onClick={() => execute(tab.sql)}>
+        <Tooltip content="Run every statement in this tab" shortcut="Ctrl ⇧ ⏎">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!ready || busy}
+            onClick={() => execute(tab.sql)}
+          >
             Run all
           </Button>
         </Tooltip>
-        <Tooltip content="Explain the first statement">
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!ready || !tab.sql.trim()}
+              loading={explain.isPending}
+            >
+              <Zap />
+              Explain
+              <ChevronDown className="size-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[240px]">
+            <DropdownMenuItem onSelect={() => explain.mutate(false)}>
+              <Zap /> Explain the plan
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => explain.mutate(true)}>
+              <Zap /> Explain analyze (runs it, then rolls back)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Separator orientation="vertical" className="h-5" />
+
+        <Tooltip content="Save this tab as a named query" shortcut="Ctrl S">
           <Button
             variant="ghost"
-            size="sm"
-            disabled={!ready || !tab.sql.trim()}
-            onClick={async () => {
-              if (!connectionId || !database) return;
-              try {
-                const plan = await sqlApi.explain({
-                  connectionId,
-                  database,
-                  sql: tab.sql,
-                  analyze: false,
-                });
-                setResults([
-                  {
-                    columns: [{ name: 'QUERY PLAN', dataType: 'text', typeCategory: 'text' }],
-                    rows: plan.split('\n').map((line) => [line]),
-                    rowCount: plan.split('\n').length,
-                    affectedRows: null,
-                    durationMs: 0,
-                    command: 'EXPLAIN',
-                    truncated: false,
-                  },
-                ]);
-                setPanel('results');
-              } catch (error) {
-                notify.failure(error, 'Could not explain the query');
-              }
-            }}
+            size="iconSm"
+            aria-label="Save query"
+            disabled={!tab.sql.trim()}
+            onClick={requestSave}
           >
-            <Zap />
-            Explain
+            <Save />
           </Button>
         </Tooltip>
 
-        <Separator orientation="vertical" className="h-5" />
+        <Tooltip content="Rename this tab">
+          <Button
+            variant="ghost"
+            size="iconSm"
+            aria-label="Rename tab"
+            onClick={() => setPrompt('rename')}
+          >
+            <Pencil />
+          </Button>
+        </Tooltip>
 
         <Tooltip content="Clear the editor" shortcut="Ctrl L">
           <Button
             variant="ghost"
             size="iconSm"
             aria-label="Clear"
+            disabled={!tab.sql}
             onClick={() => updateTab(tab.id, { sql: '' })}
           >
             <Eraser />
@@ -216,11 +312,13 @@ export function QueryPage() {
         <div className="flex min-h-[140px] flex-[2] flex-col border-b border-line">
           <SqlEditor
             key={tab.id}
+            handle={editor}
             value={tab.sql}
             completions={completions}
             onChange={(value) => updateTab(tab.id, { sql: value })}
             onRun={execute}
             onRunAll={() => execute(tab.sql)}
+            onSave={requestSave}
             autoFocus
           />
         </div>
@@ -239,8 +337,38 @@ export function QueryPage() {
           )}
         </div>
       </div>
+
+      <PromptDialog
+        open={prompt === 'save'}
+        onOpenChange={(open) => setPrompt(open ? 'save' : null)}
+        title="Save this query"
+        description="It appears under “History & saved” on every connection."
+        label="Name"
+        placeholder="Daily signups"
+        initialValue={tab.name.startsWith('Query ') ? '' : tab.name}
+        confirmLabel="Save"
+        onSubmit={(name) => saveQuery.mutateAsync(name).then(() => undefined)}
+      />
+
+      <PromptDialog
+        open={prompt === 'rename'}
+        onOpenChange={(open) => setPrompt(open ? 'rename' : null)}
+        title="Rename tab"
+        label="Tab name"
+        initialValue={tab.name}
+        confirmLabel="Rename"
+        onSubmit={(name) => updateTab(tab.id, { name })}
+      />
     </div>
   );
+}
+
+function summariseOutcome(results: QueryResult[]): string | undefined {
+  const affected = results.reduce((sum, result) => sum + (result.affectedRows ?? 0), 0);
+  if (affected > 0) return `${affected} row${affected === 1 ? '' : 's'} affected`;
+  const returned = results.reduce((sum, result) => sum + result.rowCount, 0);
+  if (returned > 0) return `${returned} row${returned === 1 ? '' : 's'} returned`;
+  return undefined;
 }
 
 /** Build the table/column map CodeMirror uses for completion. */

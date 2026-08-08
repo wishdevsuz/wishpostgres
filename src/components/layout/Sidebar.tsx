@@ -1,9 +1,11 @@
-import { Star, Table2 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Star, Table2, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ConnectionList } from '@/components/connections/ConnectionList';
 import { ObjectTree } from '@/components/layout/ObjectTree';
 import { TreeItem, TreeSection } from '@/components/layout/tree';
+import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
 import { useConnectionStore } from '@/state/connection-store';
 import { useWorkspaceStore } from '@/state/workspace-store';
@@ -14,31 +16,43 @@ const MAX_WIDTH = 460;
 export function Sidebar() {
   const width = useWorkspaceStore((state) => state.sidebarWidth);
   const setWidth = useWorkspaceStore((state) => state.setSidebarWidth);
+  const collapsed = useWorkspaceStore((state) => state.sidebarCollapsed);
   const [connectionsOpen, setConnectionsOpen] = useState(true);
   const [favoritesOpen, setFavoritesOpen] = useState(true);
-  const dragging = useRef(false);
+  const [dragging, setDragging] = useState(false);
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    dragging.current = true;
+    event.preventDefault();
+    setDragging(true);
     event.currentTarget.setPointerCapture(event.pointerId);
   }, []);
 
   const onPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragging.current) return;
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
       setWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, event.clientX)));
     },
     [setWidth],
   );
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    dragging.current = false;
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }, []);
 
+  // Keep the resize cursor while the pointer is outside the handle, and always
+  // put it back — a drag that ends off-window used to leave it stuck.
   useEffect(() => {
-    document.body.style.cursor = dragging.current ? 'col-resize' : '';
-  }, [width]);
+    if (!dragging) return;
+    document.body.style.cursor = 'col-resize';
+    return () => {
+      document.body.style.cursor = '';
+    };
+  }, [dragging]);
+
+  if (collapsed) return null;
 
   return (
     <aside
@@ -58,12 +72,16 @@ export function Sidebar() {
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize sidebar"
+        title="Drag to resize · double click to reset"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={() => setWidth(264)}
         className={cn(
-          'absolute inset-y-0 -right-1 w-2 cursor-col-resize',
-          'after:absolute after:inset-y-0 after:left-1 after:w-px after:bg-transparent after:transition-colors hover:after:bg-accent',
+          'absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize',
+          'after:absolute after:inset-y-0 after:left-1 after:w-px after:transition-colors hover:after:bg-accent',
+          dragging ? 'after:bg-accent' : 'after:bg-transparent',
         )}
       />
     </aside>
@@ -74,6 +92,7 @@ function FavoritesSection({ open, onToggle }: { open: boolean; onToggle: () => v
   const favorites = useWorkspaceStore((state) => state.favorites);
   const openTable = useWorkspaceStore((state) => state.openTable);
   const toggleFavorite = useWorkspaceStore((state) => state.toggleFavorite);
+  const current = useWorkspaceStore((state) => state.table);
   const connectionId = useConnectionStore((state) => state.activeId);
   const database = useConnectionStore((state) => state.activeDatabase);
 
@@ -98,21 +117,24 @@ function FavoritesSection({ open, onToggle }: { open: boolean; onToggle: () => v
           icon={<Table2 />}
           label={favorite.table}
           meta={favorite.schema}
+          active={current?.schema === favorite.schema && current?.table === favorite.table}
           onClick={() =>
             openTable({ schema: favorite.schema, table: favorite.table, kind: 'table' })
           }
           actions={
-            <button
-              type="button"
-              aria-label="Remove favorite"
-              className="flex size-6 items-center justify-center rounded text-caution hover:bg-[#ffffff0f]"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleFavorite(favorite);
-              }}
-            >
-              <Star className="size-3 fill-caution" />
-            </button>
+            <Tooltip content="Remove from favorites">
+              <Button
+                variant="ghost"
+                size="iconXs"
+                aria-label="Remove favorite"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleFavorite(favorite);
+                }}
+              >
+                <X />
+              </Button>
+            </Tooltip>
           }
         />
       ))}

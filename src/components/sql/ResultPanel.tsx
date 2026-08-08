@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock, Download, Search, Table2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { DataGrid } from '@/components/grid/DataGrid';
 import { fromResultColumns } from '@/components/grid/types';
@@ -22,6 +22,19 @@ export function ResultPanel({ results }: { results: QueryResult[] }) {
 
   const active = results[Math.min(index, results.length - 1)];
   const debounced = useDebounced(search, 200);
+
+  // A fresh run means fresh rows: keep neither the old page nor a selection
+  // whose indexes now point at different data.
+  useEffect(() => {
+    setIndex(0);
+    setPage(0);
+    setSelectedRows(new Set());
+    setSearch('');
+  }, [results]);
+
+  useEffect(() => {
+    setSelectedRows(new Set());
+  }, [index, page, debounced]);
 
   const filtered = useMemo(() => {
     if (!active) return [];
@@ -119,6 +132,7 @@ export function ResultPanel({ results }: { results: QueryResult[] }) {
               }}
               placeholder="Search results"
               leading={<Search />}
+              data-view-search
               className="h-7 w-[190px] text-[12px]"
               spellCheck={false}
               trailing={
@@ -205,6 +219,11 @@ export function ResultPanel({ results }: { results: QueryResult[] }) {
             : filtered
         }
         defaultName="query-result"
+        scopeNote={
+          selectedRows.size > 0
+            ? 'Only the rows you selected are written.'
+            : 'Every row this statement returned is written.'
+        }
       />
     </div>
   );

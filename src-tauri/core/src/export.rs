@@ -201,7 +201,25 @@ fn copy_field(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::temp_path;
     use serde_json::json;
+
+    fn request(format: ExportFormat, rows: Vec<Vec<Value>>) -> ExportRequest {
+        ExportRequest {
+            path: temp_path("export"),
+            format,
+            columns: vec!["id".into(), "name".into()],
+            rows,
+            table_name: Some("public.people".into()),
+            include_header: true,
+        }
+    }
+
+    fn written(request: &ExportRequest) -> String {
+        std::fs::read_to_string(&request.path).expect("the export should exist")
+    }
+
+    // ------------------------------------------------------------- rendering
 
     #[test]
     fn escapes_sql_literals() {
@@ -212,6 +230,17 @@ mod tests {
     }
 
     #[test]
+    fn sql_literals_keep_booleans_unquoted() {
+        assert_eq!(sql_literal(&json!(true)), "true");
+        assert_eq!(sql_literal(&json!(false)), "false");
+    }
+
+    #[test]
+    fn a_sql_literal_with_a_backslash_becomes_an_escape_string() {
+        assert_eq!(sql_literal(&json!("a\\b")), "E'a\\\\b'");
+    }
+
+    #[test]
     fn escapes_copy_fields() {
         assert_eq!(copy_field(&Value::Null), "\\N");
         assert_eq!(copy_field(&json!("a\tb")), "a\\tb");
@@ -219,9 +248,222 @@ mod tests {
     }
 
     #[test]
+    fn copy_fields_escape_newlines_and_carriage_returns() {
+        assert_eq!(copy_field(&json!("a\nb")), "a\\nb");
+        assert_eq!(copy_field(&json!("a\rb")), "a\\rb");
+    }
+
+    #[test]
+    fn a_copy_field_escapes_the_backslash_before_anything_else() {
+        // Otherwise "\t" written by the user would become a real tab escape.
+        assert_eq!(copy_field(&json!("\\t")), "\\\\t");
+    }
+
+    #[test]
     fn renders_scalars_plainly() {
         assert_eq!(scalar(&json!("text")), "text");
         assert_eq!(scalar(&Value::Null), "");
         assert_eq!(scalar(&json!([1, 2])), "[1,2]");
+    }
+
+    #[test]
+    fn scalars_render_numbers_and_booleans_without_quotes() {
+        assert_eq!(scalar(&json!(1.5)), "1.5");
+        assert_eq!(scalar(&json!(true)), "true");
+        assert_eq!(scalar(&json!({"a": 1})), "{\"a\":1}");
+    }
+
+    // ------------------------------------------------------- qualified_table
+
+    #[test]
+    fn a_qualified_table_name_is_quoted_part_by_part() {
+        let mut req = request(ExportFormat::SqlInsert, vec![]);
+        req.table_name = Some("public.people".into());
+        assert_eq!(qualified_table(&req).unwrap(), "\"public\".\"people\"");
+    }
+
+    #[test]
+    fn an_unqualified_table_name_works_too() {
+        let mut req = request(ExportFormat::SqlInsert, vec![]);
+        req.table_name = Some("people".into());
+        assert_eq!(qualified_table(&req).unwrap(), "\"people\"");
+    }
+
+    #[test]
+    fn a_missing_or_blank_table_name_is_refused() {
+        let mut req = request(ExportFormat::SqlInsert, vec![]);
+        req.table_name = None;
+        assert!(qualified_table(&req).is_err());
+        req.table_name = Some("   ".into());
+        assert!(qualified_table(&req).is_err());
+    }
+
+    #[test]
+    fn a_table_name_cannot_smuggle_in_a_statement() {
+        let mut req = request(ExportFormat::SqlInsert, vec![]);
+        req.table_name = Some("t\"; DROP TABLE users; --".into());
+        assert_eq!(
+            qualified_table(&req).unwrap(),
+            "\"t\"\"; DROP TABLE users; --\""
+        );
+    }
+
+    // -------------------------------------------------------------- CSV
+
+    #[test]
+    fn csv_writes_a_header_and_every_row() {
+        let req = request(
+            ExportFormat::Csv,
+            vec![vec![json!(1), json!("ann")], vec![json!(2), json!("bo")]],
+        );
+        assert_eq!(write(&req).unwrap(), 2);
+        assert_eq!(written(&req), "id,name\n1,ann\n2,bo\n");
+    }
+
+    #[test]
+    fn csv_can_omit_the_header() {
+        let mut req = request(ExportFormat::Csv, vec![vec![json!(1), json!("ann")]]);
+        req.include_header = false;
+        write(&req).unwrap();
+        assert_eq!(written(&req), "1,ann\n");
+    }
+
+    #[test]
+    fn csv_quotes_a_field_containing_the_delimiter() {
+        let req = request(ExportFormat::Csv, vec![vec![json!(1), json!("a,b")]]);
+        write(&req).unwrap();
+        assert!(written(&req).contains("\"a,b\""));
+    }
+
+    #[test]
+    fn csv_writes_null_as_an_empty_field() {
+        let req = request(ExportFormat::Csv, vec![vec![json!(1), Value::Null]]);
+        write(&req).unwrap();
+        assert!(written(&req).ends_with("1,\n"));
+    }
+
+    #[test]
+    fn csv_with_no_rows_still_writes_the_header() {
+        let req = request(ExportFormat::Csv, vec![]);
+        assert_eq!(write(&req).unwrap(), 0);
+        assert_eq!(written(&req), "id,name\n");
+    }
+
+    // -------------------------------------------------------------- JSON
+
+    #[test]
+    fn json_writes_one_object_per_row() {
+        let req = request(
+            ExportFormat::Json,
+            vec![vec![json!(1), json!("ann")], vec![json!(2), Value::Null]],
+        );
+        assert_eq!(write(&req).unwrap(), 2);
+        let parsed: Vec<Value> = serde_json::from_str(&written(&req)).unwrap();
+        assert_eq!(parsed[0]["id"], json!(1));
+        assert_eq!(parsed[0]["name"], json!("ann"));
+        assert_eq!(parsed[1]["name"], Value::Null);
+    }
+
+    #[test]
+    fn json_fills_missing_cells_with_null() {
+        // A short row must not shift the remaining column names.
+        let req = request(ExportFormat::Json, vec![vec![json!(1)]]);
+        write(&req).unwrap();
+        let parsed: Vec<Value> = serde_json::from_str(&written(&req)).unwrap();
+        assert_eq!(parsed[0]["name"], Value::Null);
+    }
+
+    #[test]
+    fn json_with_no_rows_is_an_empty_array() {
+        let req = request(ExportFormat::Json, vec![]);
+        write(&req).unwrap();
+        let parsed: Vec<Value> = serde_json::from_str(&written(&req)).unwrap();
+        assert!(parsed.is_empty());
+    }
+
+    // ----------------------------------------------------------- SQL INSERT
+
+    #[test]
+    fn sql_insert_names_the_table_and_columns() {
+        let req = request(ExportFormat::SqlInsert, vec![vec![json!(1), json!("ann")]]);
+        assert_eq!(write(&req).unwrap(), 1);
+        let text = written(&req);
+        assert!(text.starts_with("INSERT INTO \"public\".\"people\" (\"id\", \"name\") VALUES\n"));
+        assert!(text.contains("  (1, 'ann');"));
+    }
+
+    #[test]
+    fn sql_insert_batches_long_exports() {
+        let rows: Vec<Vec<Value>> = (0..1200).map(|n| vec![json!(n), json!("x")]).collect();
+        let req = request(ExportFormat::SqlInsert, rows);
+        assert_eq!(write(&req).unwrap(), 1200);
+        // 500 rows per statement: three INSERT headers.
+        assert_eq!(written(&req).matches("INSERT INTO").count(), 3);
+    }
+
+    #[test]
+    fn sql_insert_escapes_values() {
+        let req = request(ExportFormat::SqlInsert, vec![vec![json!(1), json!("it's")]]);
+        write(&req).unwrap();
+        assert!(written(&req).contains("'it''s'"));
+    }
+
+    #[test]
+    fn sql_insert_without_a_table_name_is_refused() {
+        let mut req = request(ExportFormat::SqlInsert, vec![vec![json!(1), json!("a")]]);
+        req.table_name = None;
+        assert!(write(&req).is_err());
+    }
+
+    // ------------------------------------------------------------- SQL COPY
+
+    #[test]
+    fn sql_copy_writes_a_header_body_and_terminator() {
+        let req = request(
+            ExportFormat::SqlCopy,
+            vec![vec![json!(1), json!("ann")], vec![json!(2), Value::Null]],
+        );
+        assert_eq!(write(&req).unwrap(), 2);
+        assert_eq!(
+            written(&req),
+            "COPY \"public\".\"people\" (\"id\", \"name\") FROM stdin;\n1\tann\n2\t\\N\n\\.\n"
+        );
+    }
+
+    #[test]
+    fn sql_copy_with_no_rows_is_still_valid() {
+        let req = request(ExportFormat::SqlCopy, vec![]);
+        write(&req).unwrap();
+        let text = written(&req);
+        assert!(text.starts_with("COPY "));
+        assert!(text.ends_with("\\.\n"));
+    }
+
+    // ------------------------------------------------------------- XLSX
+
+    #[test]
+    fn xlsx_produces_a_zip_container() {
+        let req = request(ExportFormat::Xlsx, vec![vec![json!(1), json!("ann")]]);
+        assert_eq!(write(&req).unwrap(), 1);
+        let bytes = std::fs::read(&req.path).unwrap();
+        // Every xlsx is a zip; the magic number is the cheapest proof.
+        assert_eq!(&bytes[..2], b"PK");
+        assert!(bytes.len() > 100);
+    }
+
+    #[test]
+    fn xlsx_handles_an_empty_result() {
+        let req = request(ExportFormat::Xlsx, vec![]);
+        assert_eq!(write(&req).unwrap(), 0);
+        assert!(std::fs::metadata(&req.path).unwrap().len() > 0);
+    }
+
+    // ------------------------------------------------------------- failures
+
+    #[test]
+    fn an_unwritable_path_is_reported() {
+        let mut req = request(ExportFormat::Csv, vec![vec![json!(1), json!("a")]]);
+        req.path = "/this/directory/does/not/exist/out.csv".into();
+        assert!(write(&req).is_err());
     }
 }

@@ -112,6 +112,8 @@ export interface FunctionInfo {
   kind: string;
 }
 
+export type ExtensionAction = 'install' | 'update' | 'uninstall' | 'uninstallCascade';
+
 export interface ExtensionInfo {
   name: string;
   schema: string | null;

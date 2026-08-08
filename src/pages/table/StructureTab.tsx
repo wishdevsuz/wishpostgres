@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, MoreHorizontal, Plus, Trash2, Type } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { Copy, KeyRound, MoreHorizontal, Plus, Trash2, Type } from 'lucide-react';
 import { useState } from 'react';
 
 import { AddColumnDialog } from '@/components/dialogs/AddColumnDialog';
@@ -14,7 +14,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/menu';
 import { Badge, EmptyState, Skeleton, Tooltip } from '@/components/ui/misc';
+import { useClipboard } from '@/hooks/use-clipboard';
 import { useScope, useTableColumns } from '@/hooks/use-catalog';
+import { useRelationActions } from '@/hooks/use-relation-actions';
 import { structure } from '@/services/api';
 import { notify } from '@/utils/notify';
 import type { ColumnMeta, TableTarget } from '@/types';
@@ -30,23 +32,26 @@ type Pending =
   | null;
 
 export function StructureTab({ target }: { target: TableTarget }) {
-  const { connectionId, database } = useScope();
-  const queryClient = useQueryClient();
+  const { connectionId, database, ready } = useScope();
   const columns = useTableColumns(target.schema, target.table);
+  const { refreshCatalog } = useRelationActions();
+  const copy = useClipboard();
   const [pending, setPending] = useState<Pending>(null);
   const [adding, setAdding] = useState(false);
 
   const alter = useMutation({
-    mutationFn: ({ column, action }: { column: string; action: Record<string, unknown> }) =>
-      structure.alterColumn({
-        connectionId: connectionId!,
-        database: database!,
+    mutationFn: ({ column, action }: { column: string; action: Record<string, unknown> }) => {
+      if (!ready || !connectionId || !database) throw new Error('Connect to a database first.');
+      return structure.alterColumn({
+        connectionId,
+        database,
         request: { schema: target.schema, table: target.table, column, action },
-      }),
+      });
+    },
     onSuccess: (statement) => {
       notify.success('Structure updated', statement);
       setPending(null);
-      void queryClient.invalidateQueries();
+      refreshCatalog();
     },
     onError: (error) => notify.failure(error, 'Could not alter the column'),
   });
@@ -70,7 +75,7 @@ export function StructureTab({ target }: { target: TableTarget }) {
           {list.length} column{list.length === 1 ? '' : 's'}
         </span>
         <div className="flex-1" />
-        <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
+        <Button variant="secondary" size="sm" disabled={!ready} onClick={() => setAdding(true)}>
           <Plus />
           Add column
         </Button>
@@ -144,6 +149,12 @@ export function StructureTab({ target }: { target: TableTarget }) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>{column.name}</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onSelect={() => void copy(column.name, 'Column name copied')}
+                        >
+                          <Copy /> Copy name
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => setPending({ kind: 'rename', column })}>
                           Rename…
                         </DropdownMenuItem>

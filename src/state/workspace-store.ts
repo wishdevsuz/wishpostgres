@@ -32,6 +32,7 @@ interface WorkspaceState {
   activeTabId: string | null;
   favorites: FavoriteTable[];
   sidebarWidth: number;
+  sidebarCollapsed: boolean;
   hydrated: boolean;
 
   hydrate: () => Promise<Workspace>;
@@ -52,6 +53,10 @@ interface WorkspaceState {
   toggleFavorite: (favorite: FavoriteTable) => void;
   isFavorite: (favorite: FavoriteTable) => boolean;
   setSidebarWidth: (width: number) => void;
+  toggleSidebar: () => void;
+
+  /** Follow a table that was renamed so the open page keeps pointing at it. */
+  renameTable: (from: TableTarget, newName: string) => void;
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
@@ -65,6 +70,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeTabId: null,
   favorites: [],
   sidebarWidth: 264,
+  sidebarCollapsed: false,
   hydrated: false,
 
   hydrate: async () => {
@@ -161,6 +167,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   isFavorite: (favorite) => get().favorites.some((entry) => sameFavorite(entry, favorite)),
 
   setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
+
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+  renameTable: (from, newName) =>
+    set((state) => ({
+      table:
+        state.table && state.table.schema === from.schema && state.table.table === from.table
+          ? { ...state.table, table: newName }
+          : state.table,
+      favorites: state.favorites.map((entry) =>
+        entry.schema === from.schema && entry.table === from.table
+          ? { ...entry, table: newName }
+          : entry,
+      ),
+    })),
 }));
 
 function sameFavorite(a: FavoriteTable, b: FavoriteTable): boolean {
