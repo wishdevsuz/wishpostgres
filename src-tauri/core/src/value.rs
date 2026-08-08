@@ -585,4 +585,161 @@ mod tests {
         v6.extend_from_slice(&[0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
         assert_eq!(inet(&v6).unwrap(), Value::String("2001:db8::1".into()));
     }
+
+    #[test]
+    fn numeric_handles_infinities_and_trailing_zeroes() {
+        assert_eq!(
+            numeric(&numeric_bytes(&[], 0, 0xD000, 0)).unwrap(),
+            "Infinity"
+        );
+        assert_eq!(
+            numeric(&numeric_bytes(&[], 0, 0xF000, 0)).unwrap(),
+            "-Infinity"
+        );
+        // A scale of 2 keeps both decimals even when the second is a zero.
+        assert_eq!(
+            numeric(&numeric_bytes(&[1, 5000], 0, 0, 2)).unwrap(),
+            "1.50"
+        );
+    }
+
+    #[test]
+    fn a_truncated_numeric_is_rejected_rather_than_guessed() {
+        assert!(numeric(&[0, 0]).is_err());
+        assert!(numeric(&[]).is_err());
+    }
+
+    #[test]
+    fn small_integers_stay_numbers() {
+        assert_eq!(big_int(0), Value::from(0));
+        assert_eq!(big_int(-1), Value::from(-1));
+        assert_eq!(
+            big_int(9_007_199_254_740_991),
+            Value::from(9_007_199_254_740_991i64)
+        );
+    }
+
+    #[test]
+    fn integers_past_the_double_range_become_strings() {
+        // Anything beyond 2^53 cannot survive a JSON number in the webview.
+        assert_eq!(
+            big_int(9_007_199_254_740_993),
+            Value::String("9007199254740993".into())
+        );
+        assert_eq!(
+            big_int(-9_007_199_254_740_993),
+            Value::String("-9007199254740993".into())
+        );
+    }
+
+    #[test]
+    fn floats_that_json_cannot_hold_become_strings() {
+        assert_eq!(float(1.5), Value::from(1.5));
+        assert_eq!(float(f64::NAN), Value::String("NaN".into()));
+        assert_eq!(float(f64::INFINITY), Value::String("Infinity".into()));
+        assert_eq!(float(f64::NEG_INFINITY), Value::String("-Infinity".into()));
+    }
+
+    #[test]
+    fn money_keeps_two_decimals() {
+        assert_eq!(money(0), Value::String("0.00".into()));
+        assert_eq!(money(100), Value::String("1.00".into()));
+        assert_eq!(money(-12345), Value::String("-123.45".into()));
+    }
+
+    #[test]
+    fn nesting_a_single_dimension_is_a_flat_array() {
+        let flat = vec![Value::from(1), Value::from(2)];
+        assert_eq!(nest(&[2], flat), serde_json::json!([1, 2]));
+    }
+
+    #[test]
+    fn nesting_three_dimensions() {
+        let flat = (1..=8).map(Value::from).collect();
+        assert_eq!(
+            nest(&[2, 2, 2], flat),
+            serde_json::json!([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+        );
+    }
+
+    #[test]
+    fn nesting_no_dimensions_is_an_empty_array() {
+        assert_eq!(nest(&[], Vec::new()), serde_json::json!([]));
+    }
+
+    #[test]
+    fn hex_escape_renders_every_byte_as_two_digits() {
+        assert_eq!(hex_escape(&[]), "\\x");
+        assert_eq!(hex_escape(&[0x00, 0x0f, 0xff]), "\\x000fff");
+    }
+
+    #[test]
+    fn text_falls_back_to_hex_only_when_it_is_not_utf8() {
+        assert_eq!(text_or_hex(b"hello"), Value::from("hello"));
+        assert_eq!(text_or_hex(&[0xff, 0xfe]), Value::String("\\xfffe".into()));
+    }
+
+    #[test]
+    fn malformed_json_is_rejected() {
+        assert!(json(b"{not json").is_err());
+    }
+
+    #[test]
+    fn a_jsonb_version_byte_other_than_one_is_not_stripped() {
+        // Only version 1 exists; anything else is parsed as plain text so a
+        // future format is reported rather than silently mangled.
+        assert!(json(&[2u8, b'{', b'}']).is_err());
+    }
+
+    #[test]
+    fn times_render_with_only_the_precision_they_carry() {
+        assert_eq!(format_time(0), "00:00:00");
+        assert_eq!(format_time(3_600_000_000), "01:00:00");
+        assert_eq!(format_time(3_661_500_000), "01:01:01.5");
+        assert_eq!(format_time(86_399_000_000), "23:59:59");
+    }
+
+    #[test]
+    fn fractions_lose_their_trailing_zeroes() {
+        assert_eq!(trim_fraction(500_000), "5");
+        assert_eq!(trim_fraction(123_456), "123456");
+        assert_eq!(trim_fraction(0), "");
+    }
+
+    #[test]
+    fn intervals_pluralise_correctly() {
+        assert_eq!(plural(1), "");
+        assert_eq!(plural(-1), "");
+        assert_eq!(plural(0), "s");
+        assert_eq!(plural(2), "s");
+    }
+
+    #[test]
+    fn friendly_type_names_use_the_sql_spelling() {
+        use tokio_postgres::types::Type;
+        assert_eq!(friendly_type_name(&Type::INT4), "integer");
+        assert_eq!(friendly_type_name(&Type::TEXT), "text");
+        assert_eq!(friendly_type_name(&Type::BOOL), "boolean");
+        assert_eq!(
+            friendly_type_name(&Type::TIMESTAMPTZ),
+            "timestamp with time zone"
+        );
+    }
+
+    #[test]
+    fn decoding_dispatches_on_the_column_type() {
+        use tokio_postgres::types::Type;
+        assert_eq!(decode(&Type::BOOL, &[1]), Value::Bool(true));
+        assert_eq!(decode(&Type::BOOL, &[0]), Value::Bool(false));
+        assert_eq!(decode(&Type::INT4, &42i32.to_be_bytes()), Value::from(42));
+        assert_eq!(decode(&Type::TEXT, b"hello"), Value::from("hello"));
+    }
+
+    #[test]
+    fn a_short_fixed_width_value_falls_back_rather_than_panicking() {
+        use tokio_postgres::types::Type;
+        // A truncated int4 must not index past the end of the buffer.
+        assert!(matches!(decode(&Type::INT4, &[0, 1]), Value::String(_)));
+        assert!(matches!(decode(&Type::BOOL, &[]), Value::String(_)));
+    }
 }

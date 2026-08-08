@@ -89,3 +89,74 @@ impl From<serde_json::Error> for AppError {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_builders_set_their_kind() {
+        assert_eq!(AppError::invalid("x").report().kind, "invalid");
+        assert_eq!(AppError::not_found("x").report().kind, "notFound");
+        assert_eq!(AppError::secret("x").report().kind, "secret");
+    }
+
+    #[test]
+    fn every_builder_offers_a_reason_and_a_fix() {
+        for error in [
+            AppError::invalid("x"),
+            AppError::not_found("x"),
+            AppError::secret("x"),
+        ] {
+            let report = error.report();
+            assert!(report.reason.is_some());
+            assert!(report.suggestion.is_some());
+        }
+    }
+
+    #[test]
+    fn the_message_survives() {
+        assert_eq!(
+            AppError::invalid("be precise").report().message,
+            "be precise"
+        );
+    }
+
+    #[test]
+    fn an_io_failure_is_reported_as_a_file_problem() {
+        let error = AppError::from(std::io::Error::other("disk on fire"));
+        assert_eq!(error.report().kind, "io");
+        assert!(error.report().message.contains("disk on fire"));
+    }
+
+    #[test]
+    fn a_parse_failure_names_the_stored_file() {
+        let parsed = serde_json::from_str::<serde_json::Value>("{oops").unwrap_err();
+        let error = AppError::from(parsed);
+        assert_eq!(error.report().kind, "json");
+        assert!(error
+            .report()
+            .suggestion
+            .as_deref()
+            .unwrap()
+            .contains("Reset settings"));
+    }
+
+    #[test]
+    fn a_core_failure_keeps_its_own_kind() {
+        let error = AppError::from(pgl_core::CoreError::Invalid("no".into()));
+        assert_eq!(error.report().kind, "invalid");
+    }
+
+    #[test]
+    fn an_app_error_serialises_as_its_report() {
+        let json = serde_json::to_string(&AppError::invalid("boom")).unwrap();
+        assert!(json.contains("\"message\":\"boom\""));
+        assert!(json.contains("\"kind\":\"invalid\""));
+    }
+
+    #[test]
+    fn the_display_form_is_the_message() {
+        assert_eq!(AppError::invalid("boom").to_string(), "boom");
+    }
+}

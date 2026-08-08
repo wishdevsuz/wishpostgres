@@ -1,7 +1,8 @@
 import { Database, Keyboard, Plug, Plus, Search, Terminal } from 'lucide-react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Kbd, StatusDot } from '@/components/ui/misc';
+import { Kbd, Spinner, StatusDot } from '@/components/ui/misc';
 import { useConnectionStore } from '@/state/connection-store';
 import { useDialogStore } from '@/state/dialog-store';
 import { useWorkspaceStore } from '@/state/workspace-store';
@@ -15,6 +16,7 @@ export function WelcomePage() {
   const editConnection = useDialogStore((state) => state.editConnection);
   const show = useDialogStore((state) => state.show);
   const addTab = useWorkspaceStore((state) => state.addTab);
+  const [busy, setBusy] = useState<string | null>(null);
 
   if (list.length === 0) {
     return (
@@ -47,8 +49,13 @@ export function WelcomePage() {
     );
   }
 
+  // Favourites first, then the most recently used, so the connection the user
+  // wants is at the top without them having to hunt for it.
   const recent = [...list]
-    .sort((a, b) => (b.lastUsedAt ?? '').localeCompare(a.lastUsedAt ?? ''))
+    .sort((a, b) => {
+      if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
+      return (b.lastUsedAt ?? '').localeCompare(a.lastUsedAt ?? '');
+    })
     .slice(0, 6);
 
   return (
@@ -67,18 +74,31 @@ export function WelcomePage() {
         <div className="space-y-1">
           {recent.map((connection) => {
             const status = statuses[connection.id] ?? 'offline';
+            const connecting = status === 'connecting' || busy === connection.id;
             return (
               <button
                 key={connection.id}
                 type="button"
-                onClick={() =>
-                  void connect(connection.id).catch((error) =>
-                    notify.failure(error, `Could not connect to ${connection.name}`),
-                  )
-                }
-                className="flex w-full items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5 text-left transition-colors hover:border-line-strong hover:bg-elevated"
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy(connection.id);
+                  try {
+                    await connect(connection.id);
+                  } catch (error) {
+                    notify.failure(error, `Could not connect to ${connection.name}`);
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                className="flex w-full items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5 text-left transition-colors hover:border-line-strong hover:bg-elevated disabled:opacity-60"
               >
-                <StatusDot tone={status === 'online' ? 'online' : 'offline'} />
+                {connecting ? (
+                  <Spinner className="size-3 text-caution" />
+                ) : (
+                  <StatusDot
+                    tone={status === 'online' ? 'online' : status === 'error' ? 'error' : 'offline'}
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-ink">{connection.name}</p>
                   <p className="truncate text-[11.5px] text-ink-faint">
@@ -86,7 +106,11 @@ export function WelcomePage() {
                   </p>
                 </div>
                 <span className="shrink-0 text-[11px] text-ink-faint">
-                  {connection.lastUsedAt ? formatRelativeTime(connection.lastUsedAt) : 'never used'}
+                  {connecting
+                    ? 'Connecting…'
+                    : connection.lastUsedAt
+                      ? formatRelativeTime(connection.lastUsedAt)
+                      : 'never used'}
                 </span>
               </button>
             );

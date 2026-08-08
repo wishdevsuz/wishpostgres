@@ -224,7 +224,28 @@ Useful scripts:
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint over the frontend |
 | `npm run format` | Prettier write |
-| `cargo test --manifest-path src-tauri/Cargo.toml -p pgl-core` | Run the Rust core test suite |
+| `npm test` | Frontend unit suite (Vitest) |
+| `npm run test:watch` | The same suite, re-running on change |
+| `npm run test:coverage` | Frontend suite with a coverage report |
+| `npm run test:rust` | Rust suite for both crates |
+| `npm run test:all` | Everything |
+
+### Tests
+
+574 unit tests run without a database or a window: 361 in Rust, 213 in the
+frontend.
+
+The Rust side covers every statement the app can build — the browse `SELECT`,
+each filter operator, the row identity, `INSERT`, `UPDATE`, `DELETE` and all the
+DDL — by asserting the SQL text and the bound parameters, so a change in quoting
+or casting fails loudly. Around that sit the value decoders, the statement
+splitter, the CSV/JSON/XLSX/SQL writers and readers, the dump scanner, the error
+mapping and the on-disk storage, including its concurrent writes.
+
+The frontend suite covers the formatters, the insert-form validation, the four
+Zustand stores, the shortcut matcher, the IPC layer and the SQL statement
+splitter the editor uses to decide what "Run" executes. Tauri's IPC is stubbed
+in `tests/setup.ts`, so nothing there can reach a real window or a real server.
 
 ## Build
 
@@ -234,9 +255,9 @@ npm run tauri build
 
 Artifacts land in `src-tauri/target/release/bundle/`:
 
-- `deb/wishpostgres_1.0.0_amd64.deb`
-- `rpm/wishpostgres-1.0.0-1.x86_64.rpm`
-- `appimage/wishpostgres_1.0.0_amd64.AppImage`
+- `deb/wishpostgres_1.0.2_amd64.deb`
+- `rpm/wishpostgres-1.0.2-1.x86_64.rpm`
+- `appimage/wishpostgres_1.0.2_amd64.AppImage`
 
 The bare executable is `src-tauri/target/release/wishpostgres`.
 

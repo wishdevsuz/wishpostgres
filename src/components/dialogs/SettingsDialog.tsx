@@ -1,7 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
-import { Database, KeyRound, RotateCcw, Settings2 } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { open as openDirectory } from '@tauri-apps/plugin-dialog';
+import { Database, FolderOpen, KeyRound, RotateCcw, Settings2 } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
+import { ConfirmDialog } from '@/components/dialogs/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,6 +28,9 @@ export function SettingsDialog() {
   const save = useSettingsStore((state) => state.save);
   const reset = useSettingsStore((state) => state.reset);
 
+  const queryClient = useQueryClient();
+  const [resetting, setResetting] = useState(false);
+
   const info = useQuery({
     queryKey: ['storage-info'],
     queryFn: connections.storageInfo,
@@ -37,6 +42,21 @@ export function SettingsDialog() {
     void save({ [key]: value } as Partial<AppSettings>).catch((error) =>
       notify.failure(error, 'Could not save settings'),
     );
+  }
+
+  async function browseForBinaries() {
+    try {
+      const picked = await openDirectory({
+        title: 'Where pg_dump and psql live',
+        directory: true,
+        multiple: false,
+      });
+      if (typeof picked !== 'string') return;
+      update('binaryDirectory', picked);
+      void queryClient.invalidateQueries({ queryKey: ['storage-info'] });
+    } catch (error) {
+      notify.failure(error, 'Could not open the folder picker');
+    }
   }
 
   return (
@@ -79,35 +99,32 @@ export function SettingsDialog() {
             />
 
             <div className="grid grid-cols-3 gap-3 pt-1">
-              <Field label="Rows per page">
-                <Input
-                  type="number"
-                  min={1}
-                  max={10000}
-                  value={settings.rowsPerPage}
-                  onChange={(event) => update('rowsPerPage', Number(event.target.value) || 100)}
-                />
-              </Field>
-              <Field label="Query timeout (s)" hint="Connection timeout.">
-                <Input
-                  type="number"
-                  min={5}
-                  max={3600}
-                  value={settings.queryTimeoutSeconds}
-                  onChange={(event) =>
-                    update('queryTimeoutSeconds', Number(event.target.value) || 60)
-                  }
-                />
-              </Field>
-              <Field label="Interface size (px)">
-                <Input
-                  type="number"
-                  min={11}
-                  max={18}
-                  value={settings.fontSize}
-                  onChange={(event) => update('fontSize', Number(event.target.value) || 13)}
-                />
-              </Field>
+              <NumberField
+                label="Rows per page"
+                min={1}
+                max={10000}
+                fallback={100}
+                value={settings.rowsPerPage}
+                onCommit={(value) => update('rowsPerPage', value)}
+              />
+              <NumberField
+                label="Query timeout (s)"
+                hint="How long one statement may run."
+                min={5}
+                max={3600}
+                fallback={60}
+                value={settings.queryTimeoutSeconds}
+                onCommit={(value) => update('queryTimeoutSeconds', value)}
+              />
+              <NumberField
+                label="Interface size (px)"
+                hint="Scales the whole window."
+                min={11}
+                max={18}
+                fallback={13}
+                value={settings.fontSize}
+                onCommit={(value) => update('fontSize', value)}
+              />
             </div>
           </Section>
 
@@ -122,39 +139,48 @@ export function SettingsDialog() {
                   onChange={(event) => update('defaultSchema', event.target.value)}
                 />
               </Field>
-              <Field label="Statement timeout (ms)" hint="0 disables the server-side timeout.">
-                <Input
-                  type="number"
-                  min={0}
-                  value={settings.statementTimeoutMs}
-                  onChange={(event) =>
-                    update('statementTimeoutMs', Number(event.target.value) || 0)
-                  }
-                />
-              </Field>
+              <NumberField
+                label="Statement timeout (ms)"
+                hint="0 disables the server-side timeout."
+                min={0}
+                max={86_400_000}
+                fallback={0}
+                allowZero
+                value={settings.statementTimeoutMs}
+                onCommit={(value) => update('statementTimeoutMs', value)}
+              />
             </div>
             <Field
               label="PostgreSQL binary directory"
               hint="Optional. Where pg_dump and psql live, if they are not on PATH."
             >
-              <Input
-                value={settings.binaryDirectory ?? ''}
-                spellCheck={false}
-                placeholder="/usr/lib/postgresql/16/bin"
-                onChange={(event) => update('binaryDirectory', event.target.value || null)}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  value={settings.binaryDirectory ?? ''}
+                  spellCheck={false}
+                  placeholder="/usr/lib/postgresql/16/bin"
+                  onChange={(event) => update('binaryDirectory', event.target.value || null)}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => void browseForBinaries()}
+                >
+                  <FolderOpen />
+                  Browse…
+                </Button>
+              </div>
             </Field>
-            <Field label="Query history limit">
-              <Input
-                type="number"
-                min={10}
-                max={100000}
-                value={settings.maxHistoryEntries}
-                onChange={(event) =>
-                  update('maxHistoryEntries', Number(event.target.value) || 1000)
-                }
-              />
-            </Field>
+            <NumberField
+              label="Query history limit"
+              hint="Older entries are dropped once the list is longer than this."
+              min={10}
+              max={100000}
+              fallback={1000}
+              value={settings.maxHistoryEntries}
+              onCommit={(value) => update('maxHistoryEntries', value)}
+            />
           </Section>
 
           <Separator />
@@ -200,12 +226,7 @@ export function SettingsDialog() {
           </Section>
         </DialogBody>
         <DialogFooter>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              void reset().then(() => notify.success('Settings reset to defaults'));
-            }}
-          >
+          <Button variant="ghost" onClick={() => setResetting(true)}>
             <RotateCcw />
             Reset to defaults
           </Button>
@@ -215,7 +236,72 @@ export function SettingsDialog() {
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ConfirmDialog
+        open={resetting}
+        onOpenChange={setResetting}
+        title="Reset every setting?"
+        description="All preferences go back to their defaults. Connections, saved queries and history are untouched."
+        confirmLabel="Reset settings"
+        onConfirm={async () => {
+          await reset();
+          notify.success('Settings reset to defaults');
+        }}
+      />
     </Dialog>
+  );
+}
+
+/**
+ * A numeric preference that only writes once the value is complete. Committing
+ * on every keystroke made the field fight the user: clearing it to retype
+ * snapped straight back to the fallback.
+ */
+function NumberField({
+  label,
+  hint,
+  min,
+  max,
+  fallback,
+  allowZero,
+  value,
+  onCommit,
+}: {
+  label: string;
+  hint?: string;
+  min: number;
+  max: number;
+  fallback: number;
+  allowZero?: boolean;
+  value: number;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => setDraft(String(value)), [value]);
+
+  function commit() {
+    const parsed = Number(draft);
+    const valid = draft.trim() !== '' && Number.isFinite(parsed) && (allowZero || parsed !== 0);
+    const next = valid ? Math.min(max, Math.max(min, Math.round(parsed))) : fallback;
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  }
+
+  return (
+    <Field label={label} hint={hint}>
+      <Input
+        type="number"
+        min={min}
+        max={max}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
+      />
+    </Field>
   );
 }
 

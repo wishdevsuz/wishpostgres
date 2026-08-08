@@ -37,6 +37,9 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build bundle
         run: npm run build
 

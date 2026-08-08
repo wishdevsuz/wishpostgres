@@ -1,25 +1,15 @@
 import { create } from 'zustand';
 
 import { toReport } from '@/services/tauri';
-import type { ErrorReport, SavedConnection, TableTarget } from '@/types';
+import type { ErrorReport, SavedConnection } from '@/types';
 
+/** Dialogs that live at the app root; everything else is owned by its page. */
 export type DialogKind =
-  | 'connection'
-  | 'settings'
-  | 'shortcuts'
-  | 'globalSearch'
-  | 'insertRow'
-  | 'addColumn'
-  | 'import'
-  | 'export'
-  | 'backup'
-  | 'restore'
-  | 'saveQuery';
+  'connection' | 'settings' | 'shortcuts' | 'globalSearch' | 'backup' | 'restore';
 
 interface DialogState {
   open: DialogKind | null;
   connectionDraft: SavedConnection | null;
-  exportTarget: TableTarget | null;
   error: ErrorReport | null;
 
   show: (kind: DialogKind) => void;
@@ -32,7 +22,6 @@ interface DialogState {
 export const useDialogStore = create<DialogState>((set) => ({
   open: null,
   connectionDraft: null,
-  exportTarget: null,
   error: null,
 
   show: (open) => set({ open }),

@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 
-import { AddColumnDialog } from '@/components/dialogs/AddColumnDialog';
 import { BackupDialog, RestoreDialog } from '@/components/dialogs/BackupDialog';
 import { ConnectionDialog } from '@/components/dialogs/ConnectionDialog';
 import { ErrorDialog } from '@/components/dialogs/ErrorDialog';
@@ -12,6 +11,7 @@ import { ShortcutsDialog } from '@/components/dialogs/ShortcutsDialog';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { SplashScreen, type BootStage } from '@/components/layout/SplashScreen';
 import { TopBar } from '@/components/layout/TopBar';
+import { ResizeEdges } from '@/components/layout/WindowChrome';
 import { TooltipProvider } from '@/components/ui/misc';
 import { useScopeReset } from '@/hooks/use-scope-sync';
 import { useShortcuts } from '@/hooks/use-shortcuts';
@@ -68,7 +68,7 @@ function Shell() {
       <BackupDialog />
       <RestoreDialog />
       <ErrorDialog />
-      <PendingAddColumn />
+      <ResizeEdges />
 
       <Toaster
         position="bottom-right"
@@ -112,7 +112,9 @@ function useBootstrap() {
     void (async () => {
       try {
         setStage('settings');
-        await loadSettings();
+        // A corrupt or unreadable preferences file must not keep the window on
+        // the splash screen: the app still works on the built-in defaults.
+        await loadSettings().catch((error) => notify.failure(error, 'Could not load settings'));
         if (cancelled) return;
 
         setStage('workspace');
@@ -120,7 +122,10 @@ function useBootstrap() {
         if (cancelled) return;
 
         setStage('connections');
-        const list = await refresh();
+        const list = await refresh().catch((error) => {
+          notify.failure(error, 'Could not read the saved connections');
+          return [];
+        });
         if (cancelled) return;
 
         const settings = useSettingsStore.getState().settings;
@@ -193,15 +198,18 @@ function useGlobalShortcuts() {
   const show = useDialogStore((state) => state.show);
   const editConnection = useDialogStore((state) => state.editConnection);
   const addTab = useWorkspaceStore((state) => state.addTab);
+  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar);
   const queryClient = useQueryClient();
 
   useShortcuts([
-    { key: 'n', ctrl: true, handler: () => editConnection(null) },
+    { key: 'n', ctrl: true, shift: false, handler: () => editConnection(null) },
     { key: 'f', ctrl: true, shift: true, allowInFields: true, handler: () => show('globalSearch') },
+    { key: 'f', ctrl: true, shift: false, handler: focusViewSearch },
     { key: 'k', ctrl: true, allowInFields: true, handler: () => show('globalSearch') },
     { key: ',', ctrl: true, allowInFields: true, handler: () => show('settings') },
+    { key: 'b', ctrl: true, allowInFields: true, handler: toggleSidebar },
     { key: '?', handler: () => show('shortcuts') },
-    { key: 't', ctrl: true, handler: () => addTab() },
+    { key: 't', ctrl: true, allowInFields: true, handler: () => addTab() },
     {
       key: 'r',
       ctrl: true,
@@ -214,12 +222,14 @@ function useGlobalShortcuts() {
   ]);
 }
 
-/** Mounted here so the Structure tab can open it from anywhere. */
-function PendingAddColumn() {
-  const open = useDialogStore((state) => state.open === 'addColumn');
-  const close = useDialogStore((state) => state.close);
-  const table = useWorkspaceStore((state) => state.table);
-
-  if (!table) return null;
-  return <AddColumnDialog open={open} onOpenChange={(next) => !next && close()} target={table} />;
+/**
+ * Ctrl+F belongs to whatever the main pane is showing. Every view marks its own
+ * filter box with `data-view-search`, so the shortcut works without each page
+ * having to register a listener of its own.
+ */
+function focusViewSearch() {
+  const field = document.querySelector<HTMLInputElement>('[data-view-search]');
+  if (!field) return;
+  field.focus();
+  field.select();
 }

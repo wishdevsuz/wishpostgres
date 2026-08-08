@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useScope } from '@/hooks/use-catalog';
+import { useRelationActions } from '@/hooks/use-relation-actions';
 import { structure } from '@/services/api';
 import { notify } from '@/utils/notify';
 import type { TableTarget } from '@/types';
@@ -59,8 +60,8 @@ export function AddColumnDialog({
   onOpenChange: (open: boolean) => void;
   target: TableTarget;
 }) {
-  const { connectionId, database } = useScope();
-  const queryClient = useQueryClient();
+  const { connectionId, database, ready } = useScope();
+  const { refreshCatalog } = useRelationActions();
 
   const [name, setName] = useState('');
   const [preset, setPreset] = useState('text');
@@ -84,10 +85,11 @@ export function AddColumnDialog({
   const dataType = preset === CUSTOM ? customType : preset;
 
   const add = useMutation({
-    mutationFn: () =>
-      structure.addColumn({
-        connectionId: connectionId!,
-        database: database!,
+    mutationFn: () => {
+      if (!ready || !connectionId || !database) throw new Error('Connect to a database first.');
+      return structure.addColumn({
+        connectionId,
+        database,
         request: {
           schema: target.schema,
           table: target.table,
@@ -98,10 +100,11 @@ export function AddColumnDialog({
           unique,
           comment: comment.trim() || null,
         },
-      }),
+      });
+    },
     onSuccess: (statement) => {
       notify.success('Column added', statement);
-      void queryClient.invalidateQueries();
+      refreshCatalog();
       onOpenChange(false);
     },
     onError: (error) => notify.failure(error, 'Could not add the column'),

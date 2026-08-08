@@ -20,9 +20,15 @@ export function ShortcutsDialog() {
                 {group.title}
               </h3>
               <dl className="space-y-1">
-                {group.items.map((item) => (
-                  <div key={item.label} className="flex items-center justify-between gap-3 py-0.5">
-                    <dt className="text-[12.5px] text-ink-soft">{item.label}</dt>
+                {group.items.map((item, index) => (
+                  <div
+                    key={`${item.label}-${item.keys.join('+')}`}
+                    className="flex items-center justify-between gap-3 py-0.5"
+                  >
+                    <dt className="text-[12.5px] text-ink-soft">
+                      {/* A second binding for the same action reads as "or". */}
+                      {index > 0 && group.items[index - 1]?.label === item.label ? '' : item.label}
+                    </dt>
                     <dd className="flex shrink-0 items-center gap-1">
                       {item.keys.map((key) => (
                         <Kbd key={key}>{key}</Kbd>

@@ -318,3 +318,171 @@ fn sqlstate_advice(sqlstate: &str, message: &str) -> (String, String) {
         ),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn report(error: CoreError) -> ErrorReport {
+        ErrorReport::from(error)
+    }
+
+    #[test]
+    fn a_simple_report_carries_only_the_message_and_kind() {
+        let simple = ErrorReport::simple("invalid", "no good");
+        assert_eq!(simple.message, "no good");
+        assert_eq!(simple.kind, "invalid");
+        assert!(simple.sqlstate.is_none());
+        assert!(simple.detail.is_none());
+        assert!(simple.hint.is_none());
+        assert!(simple.position.is_none());
+    }
+
+    #[test]
+    fn every_core_error_maps_to_a_kind() {
+        assert_eq!(report(CoreError::Pool("x".into())).kind, "pool");
+        assert_eq!(report(CoreError::Tls("x".into())).kind, "tls");
+        assert_eq!(
+            report(CoreError::Spreadsheet("x".into())).kind,
+            "spreadsheet"
+        );
+        assert_eq!(report(CoreError::Invalid("x".into())).kind, "invalid");
+        assert_eq!(report(CoreError::Cancelled).kind, "cancelled");
+        assert_eq!(report(CoreError::Io(std::io::Error::other("x"))).kind, "io");
+    }
+
+    #[test]
+    fn every_mapped_error_offers_a_reason() {
+        for error in [
+            CoreError::Pool("x".into()),
+            CoreError::Tls("x".into()),
+            CoreError::Spreadsheet("x".into()),
+            CoreError::Invalid("x".into()),
+            CoreError::Cancelled,
+            CoreError::Io(std::io::Error::other("x")),
+        ] {
+            assert!(report(error).reason.is_some());
+        }
+    }
+
+    #[test]
+    fn most_errors_also_offer_a_fix() {
+        assert!(report(CoreError::Pool("x".into())).suggestion.is_some());
+        assert!(report(CoreError::Invalid("x".into())).suggestion.is_some());
+        // A cancellation is not a failure to fix.
+        assert!(report(CoreError::Cancelled).suggestion.is_none());
+    }
+
+    #[test]
+    fn the_message_survives_the_mapping() {
+        assert_eq!(
+            report(CoreError::Invalid("be precise".into())).message,
+            "be precise"
+        );
+    }
+
+    #[test]
+    fn a_json_error_is_reported_as_json() {
+        let parsed = serde_json::from_str::<serde_json::Value>("{oops").unwrap_err();
+        let report = report(CoreError::Json(parsed));
+        assert_eq!(report.kind, "json");
+        assert!(report.suggestion.is_some());
+    }
+
+    // ------------------------------------------------------ connection advice
+
+    #[test]
+    fn a_refused_connection_names_the_service() {
+        let (reason, fix) = connection_advice("Connection refused (os error 111)");
+        assert!(reason.contains("Nothing is listening"));
+        assert!(fix.contains("systemctl"));
+    }
+
+    #[test]
+    fn a_timeout_points_at_the_firewall() {
+        assert!(connection_advice("operation timed out")
+            .0
+            .contains("timeout"));
+        assert!(connection_advice("Timeout expired").0.contains("timeout"));
+    }
+
+    #[test]
+    fn an_unresolvable_host_says_so() {
+        assert!(connection_advice("Name or service not known")
+            .0
+            .contains("hostname"));
+        assert!(connection_advice("failed to lookup address information")
+            .0
+            .contains("hostname"));
+    }
+
+    #[test]
+    fn a_rejected_password_says_so() {
+        assert!(connection_advice("password authentication failed")
+            .0
+            .contains("credentials"));
+        assert!(connection_advice("no authentication method")
+            .0
+            .contains("credentials"));
+    }
+
+    #[test]
+    fn connection_advice_is_case_insensitive() {
+        assert_eq!(
+            connection_advice("CONNECTION REFUSED").0,
+            connection_advice("connection refused").0
+        );
+    }
+
+    #[test]
+    fn an_unrecognised_connection_failure_still_advises() {
+        let (reason, fix) = connection_advice("something odd happened");
+        assert!(!reason.is_empty());
+        assert!(fix.contains("Test Connection"));
+    }
+
+    // -------------------------------------------------------- sqlstate advice
+
+    #[test]
+    fn common_sqlstates_get_specific_advice() {
+        for (code, needle) in [
+            ("28P01", "Password authentication"),
+            ("28000", "not permitted to connect"),
+            ("3D000", "does not exist on this server"),
+            ("42P01", "table or view"),
+            ("42703", "column"),
+            ("42601", "could not parse"),
+            ("42501", "privileges"),
+            ("23505", "unique constraint"),
+            ("23503", "foreign key"),
+        ] {
+            let (reason, fix) = sqlstate_advice(code, "");
+            assert!(
+                reason.contains(needle),
+                "{code} advice was `{reason}`, expected to mention `{needle}`"
+            );
+            assert!(!fix.is_empty(), "{code} offered no fix");
+        }
+    }
+
+    #[test]
+    fn an_unknown_sqlstate_still_gets_a_reason_and_a_fix() {
+        let (reason, fix) = sqlstate_advice("XX999", "boom");
+        assert!(!reason.is_empty());
+        assert!(!fix.is_empty());
+    }
+
+    #[test]
+    fn a_report_round_trips_through_json_in_camel_case() {
+        let report = ErrorReport {
+            sqlstate: Some("42P01".into()),
+            position: Some(7),
+            ..ErrorReport::simple("postgres", "boom")
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("\"sqlstate\""));
+        let back: ErrorReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.message, "boom");
+        assert_eq!(back.position, Some(7));
+    }
+}

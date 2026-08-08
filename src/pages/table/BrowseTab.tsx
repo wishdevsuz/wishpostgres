@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Table2, TriangleAlert } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DataGrid } from '@/components/grid/DataGrid';
 import { FilterDialog } from '@/components/grid/FilterDialog';
@@ -32,8 +32,16 @@ export function BrowseTab({ target }: { target: TableTarget }) {
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [dialog, setDialog] = useState<'filters' | 'insert' | 'delete' | 'export' | null>(null);
+  const [exactCount, setExactCount] = useState(false);
 
   const debouncedSearch = useDebounced(search, 250);
+
+  // Follow the "rows per page" setting while the user has not overridden it on
+  // this table, so changing it in Settings takes effect straight away.
+  const [pageSizePinned, setPageSizePinned] = useState(false);
+  useEffect(() => {
+    if (!pageSizePinned) setPageSize(rowsPerPage);
+  }, [rowsPerPage, pageSizePinned]);
 
   const request = useMemo<BrowseRequest>(
     () => ({
@@ -44,9 +52,9 @@ export function BrowseTab({ target }: { target: TableTarget }) {
       sort,
       filters,
       search: debouncedSearch.trim() || null,
-      exactCount: false,
+      exactCount,
     }),
-    [debouncedSearch, filters, page, pageSize, sort, target.schema, target.table],
+    [debouncedSearch, exactCount, filters, page, pageSize, sort, target.schema, target.table],
   );
 
   const browse = useQuery({
@@ -64,8 +72,16 @@ export function BrowseTab({ target }: { target: TableTarget }) {
 
   const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['browse', connectionId, database] });
+    void queryClient.invalidateQueries({ queryKey: ['statistics', connectionId, database] });
     setSelectedRows(new Set());
   }, [connectionId, database, queryClient]);
+
+  // Deleting the tail of a table can leave the view parked past the last page.
+  useEffect(() => {
+    if (page > 0 && !browse.isFetching && browse.data && browse.data.rows.length === 0) {
+      setPage((current) => Math.max(0, current - 1));
+    }
+  }, [browse.data, browse.isFetching, page]);
 
   const editCell = useMutation({
     mutationFn: async ({
@@ -210,12 +226,15 @@ export function BrowseTab({ target }: { target: TableTarget }) {
         }}
         onPageSizeChange={(size) => {
           setPageSize(size);
+          setPageSizePinned(true);
           setPage(0);
         }}
         selectedCount={selectedRows.size}
         onInsert={result?.editable ? () => setDialog('insert') : undefined}
         onDelete={result?.editable ? () => setDialog('delete') : undefined}
         onExport={() => setDialog('export')}
+        onRefresh={() => void browse.refetch()}
+        onCountExactly={result?.isEstimate ? () => setExactCount(true) : undefined}
         durationMs={result?.durationMs}
         extra={
           <>
@@ -307,6 +326,11 @@ export function BrowseTab({ target }: { target: TableTarget }) {
           }
           defaultName={`${target.schema}.${target.table}`}
           tableName={`${target.schema}.${target.table}`}
+          scopeNote={
+            selectedRows.size > 0
+              ? `Only the ${selectedRows.size} selected row${selectedRows.size === 1 ? '' : 's'} ${selectedRows.size === 1 ? 'is' : 'are'} written.`
+              : 'Only the rows on this page are written. Raise the page size or use a SQL tab to export more.'
+          }
         />
       )}
     </div>

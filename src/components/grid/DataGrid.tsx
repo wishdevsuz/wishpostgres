@@ -9,6 +9,7 @@ import {
   ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  MenuShortcut,
 } from '@/components/ui/menu';
 import { Checkbox } from '@/components/ui/form';
 import { toClipboardTable, useClipboard } from '@/hooks/use-clipboard';
@@ -85,6 +86,13 @@ export function DataGrid({
       return changed ? next : current;
     });
   }, [visible, rows]);
+
+  // Rows can shrink under the cursor (a delete, a new page, a re-run), which
+  // would otherwise leave the focus ring pointing at a row that is gone.
+  useEffect(() => {
+    setActive((current) => (current === null || current.row < rows.length ? current : null));
+    setEditing((current) => (current === null || current.row < rows.length ? current : null));
+  }, [rows.length]);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -230,9 +238,19 @@ export function DataGrid({
         onSelectedRowsChange(new Set(rows.map((_, index) => index)));
         return;
       }
+      if (key === 'Escape' && selectedRows.size > 0) {
+        event.preventDefault();
+        onSelectedRowsChange(new Set());
+        return;
+      }
       if (key === 'Enter' && active && onEditCell && columns[active.column]?.editable) {
         event.preventDefault();
         setEditing(active);
+        return;
+      }
+      if ((key === 'Delete' || key === 'Backspace') && onDeleteSelected && selectedRows.size > 0) {
+        event.preventDefault();
+        onDeleteSelected();
         return;
       }
       if (key === ' ' && active) {
@@ -247,6 +265,7 @@ export function DataGrid({
       copyRows,
       editing,
       move,
+      onDeleteSelected,
       onEditCell,
       onSelectedRowsChange,
       rows,
@@ -270,6 +289,10 @@ export function DataGrid({
           tabIndex={0}
           onKeyDown={onKeyDown}
           onContextMenu={onRowContextMenu}
+          // Captured, because the row checkboxes cancel the default focus and
+          // stop the event bubbling. Without this, ticking a row left the
+          // keyboard focus outside the grid and Delete or Ctrl+C did nothing.
+          onMouseDownCapture={() => scrollRef.current?.focus({ preventScroll: true })}
           className="relative min-h-0 flex-1 overflow-auto outline-none"
         >
           <div style={{ width: totalWidth, minWidth: '100%' }}>
@@ -398,6 +421,7 @@ export function DataGrid({
             <ContextMenuSeparator />
             <ContextMenuItem danger disabled={selectedRows.size === 0} onSelect={onDeleteSelected}>
               <Trash2 /> Delete {selectedRows.size > 1 ? `${selectedRows.size} rows` : 'row'}
+              <MenuShortcut>Del</MenuShortcut>
             </ContextMenuItem>
           </>
         )}

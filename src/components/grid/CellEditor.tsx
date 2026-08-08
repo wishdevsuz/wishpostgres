@@ -22,7 +22,6 @@ export function CellEditor({
   const [value, setValue] = useState(initialValue ?? '');
   const [isNull, setIsNull] = useState(initialValue === null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const multiline = column.typeCategory === 'json' || column.typeCategory === 'text';
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -116,10 +115,10 @@ export function CellEditor({
         onKeyDown={onKeyDown}
         onBlur={commit}
         spellCheck={false}
+        title={column.nullable ? 'Ctrl+N sets the cell to NULL' : undefined}
         className={cn(
           'w-full border border-accent bg-[#0d1014] px-2 font-mono text-[12.5px] text-ink outline-none ring-2 ring-accent/25',
           isNull && 'italic text-ink-faint placeholder:text-ink-faint',
-          multiline && 'font-mono',
         )}
       />
     </div>

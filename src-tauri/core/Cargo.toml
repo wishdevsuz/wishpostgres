@@ -1,6 +1,6 @@
 [package]
 name = "pgl-core"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 license = "MIT"
 description = "PostgreSQL access, introspection and data transfer core for WishPostgres"

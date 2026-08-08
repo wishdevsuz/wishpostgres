@@ -17,6 +17,9 @@ pub mod query;
 pub mod tls;
 pub mod value;
 
+#[cfg(test)]
+pub mod testing;
+
 /// Re-exported so the application layer needs no direct pool dependency.
 pub use deadpool_postgres::Client;
 pub use error::{CoreError, CoreResult, ErrorReport};

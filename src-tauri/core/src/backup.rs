@@ -544,4 +544,104 @@ mod tests {
             PathBuf::from("/usr/lib/postgresql/16/bin/psql")
         );
     }
+
+    #[test]
+    fn formats_sizes_across_every_unit() {
+        assert_eq!(human_bytes(0), "0 B");
+        assert_eq!(human_bytes(1023), "1023 B");
+        assert_eq!(human_bytes(1024), "1.0 KB");
+        assert_eq!(human_bytes(1024 * 1024), "1.0 MB");
+        assert_eq!(human_bytes(1024u64.pow(3)), "1.0 GB");
+        assert_eq!(human_bytes(1024u64.pow(4)), "1.0 TB");
+        // The largest unit absorbs anything bigger rather than overflowing.
+        assert!(human_bytes(u64::MAX).ends_with(" TB"));
+    }
+
+    #[test]
+    fn detects_more_problem_lines() {
+        assert!(is_problem(
+            "psql:dump.sql:12: ERROR:  relation does not exist"
+        ));
+        assert!(is_problem(
+            "pg_dump: warning: there are circular dependencies"
+        ));
+        assert!(is_problem("FATAL: role does not exist"));
+
+        assert!(!is_problem(""));
+        assert!(!is_problem("pg_dump: last built-in OID is 16383"));
+    }
+
+    #[test]
+    fn cleans_the_noise_off_a_reported_line() {
+        assert_eq!(clean_line("  pg_dump: error: boom  "), "error: boom");
+        assert_eq!(clean_line("psql: warning: hmm"), "warning: hmm");
+        assert_eq!(clean_line("plain text"), "plain text");
+    }
+
+    #[test]
+    fn a_binary_resolves_against_the_configured_directory() {
+        assert_eq!(resolve_binary(None, "pg_dump"), PathBuf::from("pg_dump"));
+        assert_eq!(
+            resolve_binary(Some("/usr/lib/postgresql/16/bin"), "pg_dump"),
+            PathBuf::from("/usr/lib/postgresql/16/bin/pg_dump")
+        );
+    }
+
+    #[test]
+    fn a_blank_binary_directory_is_treated_as_absent() {
+        assert_eq!(resolve_binary(Some(""), "psql"), PathBuf::from("psql"));
+        assert_eq!(resolve_binary(Some("   "), "psql"), PathBuf::from("psql"));
+    }
+
+    #[test]
+    fn an_exit_status_is_described() {
+        // A status this test can construct portably: a real command's result.
+        let ok = std::process::Command::new("true").status();
+        if let Ok(status) = ok {
+            assert!(status_code(&status).contains('0'));
+        }
+    }
+
+    #[tokio::test]
+    async fn a_dump_with_an_include_directive_is_refused() {
+        assert!(scan("\\i /etc/passwd\nSELECT 1;\n").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn a_dump_writing_to_a_file_is_refused() {
+        assert!(scan("\\o /tmp/stolen\nSELECT 1;\n").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn the_two_meta_commands_pg_dump_emits_stay_allowed() {
+        assert_eq!(scan("\\connect mydb\nSELECT 1;\n").await, None);
+        assert_eq!(scan("COPY t FROM stdin;\n1\n\\.\n").await, None);
+    }
+
+    #[tokio::test]
+    async fn a_meta_command_not_at_the_start_of_a_line_is_data() {
+        assert_eq!(scan("SELECT 'a \\! b';\n").await, None);
+    }
+
+    #[tokio::test]
+    async fn an_empty_dump_is_accepted() {
+        assert_eq!(scan("").await, None);
+    }
+
+    #[tokio::test]
+    async fn a_meta_command_inside_a_copy_block_is_data() {
+        let dump = "COPY t (note) FROM stdin;\n\\! rm -rf /\n\\.\nSELECT 1;\n";
+        assert_eq!(scan(dump).await, None);
+    }
+
+    #[tokio::test]
+    async fn a_meta_command_after_a_copy_block_is_still_caught() {
+        let dump = "COPY t (note) FROM stdin;\n1\n\\.\n\\! rm -rf /\n";
+        assert!(scan(dump).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn scanning_a_missing_file_is_an_error() {
+        assert!(scan_for_meta_commands("/no/such/dump.sql").await.is_err());
+    }
 }

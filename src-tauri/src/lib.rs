@@ -4,6 +4,7 @@ mod state;
 mod storage;
 
 use tauri::Manager;
+use tauri_plugin_window_state::StateFlags;
 
 use state::AppState;
 use storage::Storage;
@@ -11,7 +12,15 @@ use storage::Storage;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // The window draws its own title bar, so the decoration state
+                // is a property of the app, not of the last session. Restoring
+                // it would put the system title bar back above ours for anyone
+                // upgrading from a build that still had one.
+                .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
@@ -50,6 +59,7 @@ pub fn run() {
             commands::data::rename_relation,
             commands::data::truncate_table,
             commands::data::drop_relation,
+            commands::data::set_extension,
             commands::query::run_sql,
             commands::query::explain_sql,
             commands::transfer::export_rows,

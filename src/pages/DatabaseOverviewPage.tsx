@@ -73,6 +73,7 @@ export function DatabaseOverviewPage() {
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Find a table, view or function"
           leading={<Search />}
+          data-view-search
           className="h-7 w-[260px] text-[12px]"
           spellCheck={false}
           trailing={

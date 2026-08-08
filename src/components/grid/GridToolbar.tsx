@@ -1,10 +1,12 @@
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
   Columns3,
   Download,
   Filter,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   X,
@@ -53,6 +55,9 @@ export interface GridToolbarProps {
   onInsert?: () => void;
   onDelete?: () => void;
   onExport?: () => void;
+  onRefresh?: () => void;
+  /** Offered while the row count is only an estimate from the planner. */
+  onCountExactly?: () => void;
 
   durationMs?: number;
   extra?: ReactNode;
@@ -81,11 +86,13 @@ export function GridToolbar({
   onInsert,
   onDelete,
   onExport,
+  onRefresh,
+  onCountExactly,
   durationMs,
   extra,
 }: GridToolbarProps) {
   const lastPage = totalRows === null ? page : Math.max(0, Math.ceil(totalRows / pageSize) - 1);
-  const from = totalRows === 0 ? 0 : page * pageSize + 1;
+  const from = loadedRows === 0 ? 0 : page * pageSize + 1;
   const to = page * pageSize + loadedRows;
 
   return (
@@ -96,6 +103,7 @@ export function GridToolbar({
         placeholder="Search all columns"
         leading={<Search />}
         spellCheck={false}
+        data-view-search
         className="h-7 w-[210px] text-[12px]"
         trailing={
           search ? (
@@ -187,9 +195,17 @@ export function GridToolbar({
       )}
 
       {onExport && (
-        <Tooltip content="Export result">
+        <Tooltip content="Export the rows on screen">
           <Button variant="ghost" size="iconSm" aria-label="Export" onClick={onExport}>
             <Download />
+          </Button>
+        </Tooltip>
+      )}
+
+      {onRefresh && (
+        <Tooltip content="Reload rows" shortcut="Ctrl R">
+          <Button variant="ghost" size="iconSm" aria-label="Reload rows" onClick={onRefresh}>
+            <RefreshCw />
           </Button>
         </Tooltip>
       )}
@@ -200,16 +216,29 @@ export function GridToolbar({
         {durationMs !== undefined && (
           <span className="tabular-nums text-ink-faint">{formatDuration(durationMs)}</span>
         )}
-        <span className="tabular-nums">
-          {formatCount(from)}–{formatCount(to)}
-          {totalRows !== null && (
-            <>
-              {' of '}
-              {isEstimate && '~'}
-              {formatCount(totalRows)}
-            </>
-          )}
-        </span>
+        {onCountExactly ? (
+          <Tooltip content="This total comes from the planner's estimate. Click to run an exact count.">
+            <button
+              type="button"
+              onClick={onCountExactly}
+              className="tabular-nums underline decoration-dotted underline-offset-2 hover:text-ink"
+            >
+              {formatCount(from)}–{formatCount(to)}
+              {totalRows !== null && ` of ~${formatCount(totalRows)}`}
+            </button>
+          </Tooltip>
+        ) : (
+          <span className="tabular-nums">
+            {formatCount(from)}–{formatCount(to)}
+            {totalRows !== null && (
+              <>
+                {' of '}
+                {isEstimate && '~'}
+                {formatCount(totalRows)}
+              </>
+            )}
+          </span>
+        )}
       </div>
 
       <DropdownMenu>
@@ -219,15 +248,31 @@ export function GridToolbar({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuLabel>Rows per page</DropdownMenuLabel>
           {PAGE_SIZES.map((size) => (
-            <DropdownMenuItem key={size} onSelect={() => onPageSizeChange(size)}>
+            <DropdownMenuCheckboxItem
+              key={size}
+              checked={size === pageSize}
+              onCheckedChange={() => onPageSizeChange(size)}
+            >
               {size} rows
-            </DropdownMenuItem>
+            </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
       <div className="flex items-center gap-0.5">
+        <Tooltip content="First page">
+          <Button
+            variant="ghost"
+            size="iconSm"
+            aria-label="First page"
+            disabled={page === 0}
+            onClick={() => onPageChange(0)}
+          >
+            <ChevronsLeft />
+          </Button>
+        </Tooltip>
         <Tooltip content="Previous page">
           <Button
             variant="ghost"

@@ -15,7 +15,7 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import {
   drawSelection,
   dropCursor,
@@ -28,7 +28,9 @@ import {
   rectangularSelection,
 } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
-import { useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
+
+import { statementRanges } from './statements';
 
 const highlightStyle = HighlightStyle.define([
   { tag: tags.keyword, color: '#a78bfa', fontWeight: '500' },
@@ -67,6 +69,13 @@ const theme = EditorView.theme(
   { dark: true },
 );
 
+export interface SqlEditorHandle {
+  /** The selection, or the statement the cursor sits in, or the whole document. */
+  currentStatement: () => string;
+  focus: () => void;
+  insert: (text: string) => void;
+}
+
 export interface SqlEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -74,7 +83,9 @@ export interface SqlEditorProps {
   completions?: SQLNamespace;
   onRun?: (selection: string | null) => void;
   onRunAll?: () => void;
+  onSave?: () => void;
   autoFocus?: boolean;
+  handle?: Ref<SqlEditorHandle>;
 }
 
 export function SqlEditor({
@@ -83,12 +94,15 @@ export function SqlEditor({
   completions,
   onRun,
   onRunAll,
+  onSave,
   autoFocus,
+  handle,
 }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onRun, onRunAll });
-  callbacks.current = { onChange, onRun, onRunAll };
+  const language = useRef(new Compartment());
+  const callbacks = useRef({ onChange, onRun, onRunAll, onSave });
+  callbacks.current = { onChange, onRun, onRunAll, onSave };
 
   useEffect(() => {
     if (!host.current) return;
@@ -112,15 +126,13 @@ export function SqlEditor({
       syntaxHighlighting(highlightStyle),
       theme,
       EditorView.lineWrapping,
-      sql({ dialect: PostgreSQL, schema: completions, upperCaseKeywords: true }),
+      language.current.of(sql({ dialect: PostgreSQL, upperCaseKeywords: true })),
       keymap.of([
         {
           key: 'Mod-Enter',
           preventDefault: true,
           run: (editor) => {
-            const { from, to } = editor.state.selection.main;
-            const selected = from === to ? null : editor.state.sliceDoc(from, to);
-            callbacks.current.onRun?.(selected);
+            callbacks.current.onRun?.(statementAt(editor));
             return true;
           },
         },
@@ -129,6 +141,14 @@ export function SqlEditor({
           preventDefault: true,
           run: () => {
             callbacks.current.onRunAll?.();
+            return true;
+          },
+        },
+        {
+          key: 'Mod-s',
+          preventDefault: true,
+          run: () => {
+            callbacks.current.onSave?.();
             return true;
           },
         },
@@ -156,8 +176,21 @@ export function SqlEditor({
       editor.destroy();
       view.current = null;
     };
-    // The editor is created once per mount; `value` is synchronised below.
+    // The editor is created once per mount; the document and the completion
+    // schema are pushed in through the effects below rather than by rebuilding
+    // it, which used to throw away the undo history and the cursor mid-typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reconfigure completions in place as the catalog loads.
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    editor.dispatch({
+      effects: language.current.reconfigure(
+        sql({ dialect: PostgreSQL, schema: completions, upperCaseKeywords: true }),
+      ),
+    });
   }, [completions]);
 
   // Push external value changes (tab switches, history replay) into the editor.
@@ -172,5 +205,43 @@ export function SqlEditor({
     });
   }, [value]);
 
+  useImperativeHandle(
+    handle,
+    () => ({
+      currentStatement: () => {
+        const editor = view.current;
+        if (!editor) return '';
+        return statementAt(editor) ?? editor.state.doc.toString();
+      },
+      focus: () => view.current?.focus(),
+      insert: (text: string) => {
+        const editor = view.current;
+        if (!editor) return;
+        const { from, to } = editor.state.selection.main;
+        editor.dispatch({ changes: { from, to, insert: text } });
+        editor.focus();
+      },
+    }),
+    [],
+  );
+
   return <div ref={host} className="min-h-0 flex-1 overflow-hidden" />;
+}
+
+/**
+ * What "Run" should execute: the selection when there is one, otherwise the
+ * statement the cursor is inside. `null` means the caller should fall back to
+ * the whole document, which happens when the cursor is not inside a statement.
+ */
+function statementAt(editor: EditorView): string | null {
+  const { from, to } = editor.state.selection.main;
+  if (from !== to) return editor.state.sliceDoc(from, to);
+
+  const doc = editor.state.doc.toString();
+  const boundaries = statementRanges(doc);
+  const found = boundaries.find((range) => from >= range.from && from <= range.to);
+  if (!found) return null;
+
+  const text = doc.slice(found.from, found.to).trim();
+  return text || null;
 }

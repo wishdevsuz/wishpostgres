@@ -1,6 +1,8 @@
 import { Copy, Database, Pencil, Plug, PlugZap, Plus, Star, Trash2, Zap } from 'lucide-react';
-import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 
+import { ConfirmDialog } from '@/components/dialogs/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -34,6 +36,10 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
   const remove = useConnectionStore((state) => state.remove);
   const setActive = useConnectionStore((state) => state.setActive);
   const editConnection = useDialogStore((state) => state.editConnection);
+  const queryClient = useQueryClient();
+
+  const [deleting, setDeleting] = useState<SavedConnection | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
 
   const handleConnect = useCallback(
     async (connection: SavedConnection) => {
@@ -81,17 +87,15 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
 
   const handleDelete = useCallback(
     async (connection: SavedConnection) => {
-      try {
-        await remove(connection.id);
-        notify.success(`Deleted ${connection.name}`);
-      } catch (error) {
-        notify.failure(error, 'Could not delete the connection');
-      }
+      await remove(connection.id);
+      queryClient.removeQueries();
+      notify.success(`Deleted ${connection.name}`);
     },
-    [remove],
+    [queryClient, remove],
   );
 
   const handleTest = useCallback(async (connection: SavedConnection) => {
+    setTesting(connection.id);
     try {
       const server = await api.test(connection);
       notify.success(
@@ -100,6 +104,8 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
       );
     } catch (error) {
       notify.failure(error, 'Test failed');
+    } finally {
+      setTesting(null);
     }
   }, []);
 
@@ -154,7 +160,7 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
                     onClick={() => void handleConnect(connection)}
                     title={`${connection.username}@${connection.host}:${connection.port}/${connection.database}`}
                     icon={
-                      status === 'connecting' ? (
+                      status === 'connecting' || testing === connection.id ? (
                         <Spinner className="size-3 text-caution" />
                       ) : (
                         <StatusDot tone={statusTone(status)} className="ml-[5px] mr-[5px]" />
@@ -182,7 +188,10 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
                 >
                   <PlugZap /> Disconnect
                 </ContextMenuItem>
-                <ContextMenuItem onSelect={() => void handleTest(connection)}>
+                <ContextMenuItem
+                  disabled={testing !== null}
+                  onSelect={() => void handleTest(connection)}
+                >
                   <Zap /> Test connection
                 </ContextMenuItem>
                 <ContextMenuSeparator />
@@ -196,7 +205,7 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
                   <Star /> {connection.favorite ? 'Remove from favorites' : 'Add to favorites'}
                 </ContextMenuItem>
                 <ContextMenuSeparator />
-                <ContextMenuItem danger onSelect={() => void handleDelete(connection)}>
+                <ContextMenuItem danger onSelect={() => setDeleting(connection)}>
                   <Trash2 /> Delete
                 </ContextMenuItem>
               </ContextMenuContent>
@@ -217,6 +226,18 @@ export function ConnectionList({ open, onToggle }: { open: boolean; onToggle: ()
           </Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title={deleting ? `Delete ${deleting.name}?` : 'Delete this connection?'}
+        description="The saved connection and its stored password are removed. The database itself is untouched."
+        confirmLabel="Delete connection"
+        destructive
+        onConfirm={async () => {
+          if (deleting) await handleDelete(deleting);
+        }}
+      />
     </TreeSection>
   );
 }

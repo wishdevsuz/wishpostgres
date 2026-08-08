@@ -1,17 +1,28 @@
-import { Boxes, Clock, Copy, FileCode2, Search, Trash2 } from 'lucide-react';
+import {
+  ArrowUpCircle,
+  Boxes,
+  Clock,
+  Copy,
+  FileCode2,
+  Search,
+  Terminal,
+  Trash2,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { ConfirmDialog } from '@/components/dialogs/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Skeleton, Tooltip } from '@/components/ui/misc';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { useDebounced } from '@/hooks/use-debounced';
-import { useExtensions, useFunctions } from '@/hooks/use-catalog';
-import { prefs } from '@/services/api';
+import { useExtensions, useFunctions, useScope } from '@/hooks/use-catalog';
+import { prefs, structure } from '@/services/api';
 import { useWorkspaceStore } from '@/state/workspace-store';
 import { notify } from '@/utils/notify';
 import { formatDuration, formatRelativeTime, summariseSql } from '@/utils/format';
+import type { ExtensionAction, ExtensionInfo } from '@/types';
 
 function PageShell({
   title,
@@ -39,6 +50,7 @@ function PageShell({
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Filter"
           leading={<Search />}
+          data-view-search
           className="h-7 w-[220px] text-[12px]"
           spellCheck={false}
         />
@@ -55,6 +67,8 @@ export function FunctionsPage() {
   const [search, setSearch] = useState('');
   const term = useDebounced(search, 200).trim().toLowerCase();
   const copy = useClipboard();
+  const addTab = useWorkspaceStore((state) => state.addTab);
+  const updateTab = useWorkspaceStore((state) => state.updateTab);
 
   const list = useMemo(
     () =>
@@ -91,22 +105,42 @@ export function FunctionsPage() {
                 </Badge>
                 <Badge variant="neutral">{entry.language}</Badge>
                 <div className="flex-1" />
-                <Tooltip content="Copy call signature">
-                  <Button
-                    variant="ghost"
-                    size="iconXs"
-                    aria-label="Copy signature"
-                    className="opacity-0 group-hover/row:opacity-100"
-                    onClick={() =>
-                      void copy(
-                        `${entry.schema}.${entry.name}(${entry.arguments})`,
-                        'Signature copied',
-                      )
-                    }
-                  >
-                    <Copy />
-                  </Button>
-                </Tooltip>
+                <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover/row:opacity-100">
+                  <Tooltip content="Copy call signature">
+                    <Button
+                      variant="ghost"
+                      size="iconXs"
+                      aria-label="Copy signature"
+                      onClick={() =>
+                        void copy(
+                          `${entry.schema}.${entry.name}(${entry.arguments})`,
+                          'Signature copied',
+                        )
+                      }
+                    >
+                      <Copy />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip content="Draft a call in a new SQL tab">
+                    <Button
+                      variant="ghost"
+                      size="iconXs"
+                      aria-label="Call in a SQL tab"
+                      onClick={() => {
+                        const tab = addTab();
+                        updateTab(tab.id, {
+                          name: entry.name,
+                          sql:
+                            entry.kind === 'procedure'
+                              ? `CALL "${entry.schema}"."${entry.name}"();`
+                              : `SELECT "${entry.schema}"."${entry.name}"();`,
+                        });
+                      }}
+                    >
+                      <Terminal />
+                    </Button>
+                  </Tooltip>
+                </div>
               </div>
               <p className="truncate font-mono text-[11.5px] text-ink-muted">({entry.arguments})</p>
               <p className="truncate font-mono text-[11.5px] text-ink-faint">
@@ -122,8 +156,35 @@ export function FunctionsPage() {
 
 export function ExtensionsPage() {
   const extensions = useExtensions();
+  const { connectionId, database, ready } = useScope();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [removing, setRemoving] = useState<ExtensionInfo | null>(null);
   const term = useDebounced(search, 200).trim().toLowerCase();
+
+  const change = useMutation({
+    mutationFn: ({ name, action }: { name: string; action: ExtensionAction }) =>
+      structure.setExtension({
+        connectionId: connectionId!,
+        database: database!,
+        name,
+        action,
+      }),
+    onSuccess: (statement, { action }) => {
+      notify.success(
+        action === 'install'
+          ? 'Extension installed'
+          : action === 'update'
+            ? 'Extension updated'
+            : 'Extension removed',
+        statement,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['extensions'] });
+      void queryClient.invalidateQueries({ queryKey: ['functions'] });
+      void queryClient.invalidateQueries({ queryKey: ['schemas'] });
+    },
+    onError: (error) => notify.failure(error, 'Could not change the extension'),
+  });
 
   const list = useMemo(
     () =>
@@ -138,6 +199,19 @@ export function ExtensionsPage() {
 
   const installed = list.filter((entry) => entry.installed);
   const available = list.filter((entry) => !entry.installed);
+  const pending = change.isPending ? change.variables?.name : undefined;
+
+  const row = (entry: ExtensionInfo) => (
+    <ExtensionRow
+      key={entry.name}
+      entry={entry}
+      busy={pending === entry.name}
+      disabled={!ready || change.isPending}
+      onInstall={() => change.mutate({ name: entry.name, action: 'install' })}
+      onUpdate={() => change.mutate({ name: entry.name, action: 'update' })}
+      onUninstall={() => setRemoving(entry)}
+    />
+  );
 
   return (
     <PageShell
@@ -149,58 +223,112 @@ export function ExtensionsPage() {
       {extensions.isLoading ? (
         <LoadingList />
       ) : list.length === 0 ? (
-        <EmptyState icon={<Boxes />} title="Nothing matches" />
+        <EmptyState
+          icon={<Boxes />}
+          title={term ? 'Nothing matches' : 'No extensions available'}
+          description="Extensions come from the packages installed alongside the PostgreSQL server."
+        />
       ) : (
         <>
           {installed.length > 0 && <GroupHeading>Installed</GroupHeading>}
-          <ul className="divide-y divide-line">
-            {installed.map((entry) => (
-              <ExtensionRow key={entry.name} entry={entry} />
-            ))}
-          </ul>
+          <ul className="divide-y divide-line">{installed.map(row)}</ul>
           {available.length > 0 && <GroupHeading>Available</GroupHeading>}
-          <ul className="divide-y divide-line">
-            {available.map((entry) => (
-              <ExtensionRow key={entry.name} entry={entry} />
-            ))}
-          </ul>
+          <ul className="divide-y divide-line">{available.map(row)}</ul>
         </>
       )}
+
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={removing ? `Remove ${removing.name}?` : 'Remove this extension?'}
+        description="Objects the extension provides are dropped with it. Anything that depends on them has to be dropped too."
+        confirmLabel="Remove extension"
+        destructive
+        onConfirm={async () => {
+          if (removing) await change.mutateAsync({ name: removing.name, action: 'uninstall' });
+        }}
+      />
     </PageShell>
   );
 }
 
 function ExtensionRow({
   entry,
+  busy,
+  disabled,
+  onInstall,
+  onUpdate,
+  onUninstall,
 }: {
-  entry: {
-    name: string;
-    comment: string | null;
-    installedVersion: string | null;
-    defaultVersion: string | null;
-    schema: string | null;
-    installed: boolean;
-  };
+  entry: ExtensionInfo;
+  busy: boolean;
+  disabled: boolean;
+  onInstall: () => void;
+  onUpdate: () => void;
+  onUninstall: () => void;
 }) {
+  const upgradable =
+    entry.installed &&
+    entry.defaultVersion !== null &&
+    entry.installedVersion !== entry.defaultVersion;
+
   return (
-    <li className="px-3 py-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[12.5px] font-medium text-ink">{entry.name}</span>
-        {entry.installed ? (
-          <Badge variant="positive">v{entry.installedVersion}</Badge>
-        ) : (
-          <Badge variant="outline">v{entry.defaultVersion}</Badge>
-        )}
-        {entry.schema && <Badge variant="neutral">{entry.schema}</Badge>}
-        {entry.installed &&
-          entry.defaultVersion &&
-          entry.installedVersion !== entry.defaultVersion && (
-            <Badge variant="caution">update to {entry.defaultVersion}</Badge>
+    <li className="group/row flex items-start gap-3 px-3 py-2 hover:bg-[#ffffff05]">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[12.5px] font-medium text-ink">{entry.name}</span>
+          {entry.installed ? (
+            <Badge variant="positive">v{entry.installedVersion}</Badge>
+          ) : (
+            <Badge variant="outline">v{entry.defaultVersion}</Badge>
           )}
+          {entry.schema && <Badge variant="neutral">{entry.schema}</Badge>}
+          {upgradable && <Badge variant="caution">update to {entry.defaultVersion}</Badge>}
+        </div>
+        {entry.comment && (
+          <p className="text-[11.5px] leading-snug text-ink-muted">{entry.comment}</p>
+        )}
       </div>
-      {entry.comment && (
-        <p className="text-[11.5px] leading-snug text-ink-muted">{entry.comment}</p>
-      )}
+
+      <div className="flex shrink-0 items-center gap-1">
+        {upgradable && (
+          <Tooltip content={`Update to ${entry.defaultVersion}`}>
+            <Button
+              variant="subtle"
+              size="xs"
+              loading={busy}
+              disabled={disabled}
+              onClick={onUpdate}
+            >
+              <ArrowUpCircle />
+              Update
+            </Button>
+          </Tooltip>
+        )}
+        {entry.installed ? (
+          <Button
+            variant="ghost"
+            size="iconXs"
+            aria-label={`Remove ${entry.name}`}
+            title={`Remove ${entry.name}`}
+            className="opacity-0 group-hover/row:opacity-100"
+            disabled={disabled}
+            onClick={onUninstall}
+          >
+            <Trash2 />
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="xs"
+            loading={busy}
+            disabled={disabled}
+            onClick={onInstall}
+          >
+            Install
+          </Button>
+        )}
+      </div>
     </li>
   );
 }
@@ -213,6 +341,7 @@ export function HistoryPage() {
   const copy = useClipboard();
   const addTab = useWorkspaceStore((state) => state.addTab);
   const updateTab = useWorkspaceStore((state) => state.updateTab);
+  const [clearing, setClearing] = useState(false);
 
   const clear = useMutation({
     mutationFn: prefs.clearHistory,
@@ -220,6 +349,7 @@ export function HistoryPage() {
       notify.success('History cleared');
       void queryClient.invalidateQueries({ queryKey: ['history'] });
     },
+    onError: (error) => notify.failure(error, 'Could not clear the history'),
   });
 
   const list = useMemo(
@@ -245,7 +375,8 @@ export function HistoryPage() {
           variant="ghost"
           size="sm"
           disabled={(history.data ?? []).length === 0}
-          onClick={() => clear.mutate()}
+          loading={clear.isPending}
+          onClick={() => setClearing(true)}
         >
           <Trash2 />
           Clear
@@ -313,6 +444,16 @@ export function HistoryPage() {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={clearing}
+        onOpenChange={setClearing}
+        title="Clear the query history?"
+        description="Every recorded statement is removed. Saved queries are not affected."
+        confirmLabel="Clear history"
+        destructive
+        onConfirm={() => clear.mutateAsync()}
+      />
     </PageShell>
   );
 }

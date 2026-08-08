@@ -440,3 +440,279 @@ pub struct TransferProgress {
     pub message: String,
     pub done: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------ TypeCategory
+
+    #[test]
+    fn every_numeric_type_is_a_number() {
+        for name in [
+            "smallint",
+            "integer",
+            "bigint",
+            "real",
+            "double precision",
+            "numeric",
+            "smallserial",
+            "serial",
+            "bigserial",
+            "money",
+            "int2",
+            "int4",
+            "int8",
+            "float4",
+            "float8",
+            "decimal",
+            "oid",
+        ] {
+            assert_eq!(
+                TypeCategory::from_pg(name, false, false),
+                TypeCategory::Number,
+                "{name} should be a number"
+            );
+        }
+    }
+
+    #[test]
+    fn every_textual_type_is_text() {
+        for name in [
+            "text",
+            "character varying",
+            "character",
+            "varchar",
+            "char",
+            "name",
+            "citext",
+            "xml",
+        ] {
+            assert_eq!(
+                TypeCategory::from_pg(name, false, false),
+                TypeCategory::Text
+            );
+        }
+    }
+
+    #[test]
+    fn dates_times_and_timestamps_are_kept_apart() {
+        assert_eq!(
+            TypeCategory::from_pg("date", false, false),
+            TypeCategory::Date
+        );
+        assert_eq!(
+            TypeCategory::from_pg("time", false, false),
+            TypeCategory::Time
+        );
+        assert_eq!(
+            TypeCategory::from_pg("time with time zone", false, false),
+            TypeCategory::Time
+        );
+        assert_eq!(
+            TypeCategory::from_pg("timestamp with time zone", false, false),
+            TypeCategory::Timestamp
+        );
+        assert_eq!(
+            TypeCategory::from_pg("timestamptz", false, false),
+            TypeCategory::Timestamp
+        );
+        assert_eq!(
+            TypeCategory::from_pg("interval", false, false),
+            TypeCategory::Interval
+        );
+    }
+
+    #[test]
+    fn the_remaining_categories_map() {
+        assert_eq!(
+            TypeCategory::from_pg("boolean", false, false),
+            TypeCategory::Boolean
+        );
+        assert_eq!(
+            TypeCategory::from_pg("jsonb", false, false),
+            TypeCategory::Json
+        );
+        assert_eq!(
+            TypeCategory::from_pg("uuid", false, false),
+            TypeCategory::Uuid
+        );
+        assert_eq!(
+            TypeCategory::from_pg("bytea", false, false),
+            TypeCategory::Binary
+        );
+        assert_eq!(
+            TypeCategory::from_pg("inet", false, false),
+            TypeCategory::Network
+        );
+        assert_eq!(
+            TypeCategory::from_pg("macaddr8", false, false),
+            TypeCategory::Network
+        );
+        assert_eq!(
+            TypeCategory::from_pg("polygon", false, false),
+            TypeCategory::Geometric
+        );
+    }
+
+    #[test]
+    fn an_unknown_type_falls_back_to_other() {
+        assert_eq!(
+            TypeCategory::from_pg("tsvector", false, false),
+            TypeCategory::Other
+        );
+        assert_eq!(TypeCategory::from_pg("", false, false), TypeCategory::Other);
+    }
+
+    #[test]
+    fn enum_and_array_flags_win_over_the_name() {
+        // The grid needs a picker for an enum and a text box for an array,
+        // whatever the underlying base type happens to be called.
+        assert_eq!(
+            TypeCategory::from_pg("integer", true, false),
+            TypeCategory::Enum
+        );
+        assert_eq!(
+            TypeCategory::from_pg("integer", false, true),
+            TypeCategory::Array
+        );
+        assert_eq!(
+            TypeCategory::from_pg("integer", true, true),
+            TypeCategory::Enum
+        );
+    }
+
+    // ------------------------------------------------------ FilterOperator
+
+    #[test]
+    fn only_the_null_checks_go_without_a_value() {
+        assert!(!FilterOperator::IsNull.needs_value());
+        assert!(!FilterOperator::IsNotNull.needs_value());
+
+        for operator in [
+            FilterOperator::Equals,
+            FilterOperator::NotEquals,
+            FilterOperator::GreaterThan,
+            FilterOperator::GreaterOrEqual,
+            FilterOperator::LessThan,
+            FilterOperator::LessOrEqual,
+            FilterOperator::Contains,
+            FilterOperator::NotContains,
+            FilterOperator::StartsWith,
+            FilterOperator::EndsWith,
+        ] {
+            assert!(operator.needs_value(), "{operator:?} should need a value");
+        }
+    }
+
+    // --------------------------------------------------------- serde shapes
+
+    #[test]
+    fn enums_travel_as_camel_case() {
+        assert_eq!(
+            serde_json::to_string(&TypeCategory::Timestamp).unwrap(),
+            "\"timestamp\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FilterOperator::NotContains).unwrap(),
+            "\"notContains\""
+        );
+        assert_eq!(
+            serde_json::to_string(&IdentityKind::PrimaryKey).unwrap(),
+            "\"primaryKey\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RelationKind::MaterializedView).unwrap(),
+            "\"materializedView\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExportFormat::SqlInsert).unwrap(),
+            "\"sqlInsert\""
+        );
+    }
+
+    #[test]
+    fn a_browse_request_parses_from_the_frontend_shape() {
+        let request: BrowseRequest = serde_json::from_str(
+            r#"{"schema":"public","table":"t","limit":50,"offset":100,
+                "sort":[{"column":"id","direction":"desc"}],
+                "filters":[{"column":"id","operator":"greaterThan","value":"3"}],
+                "search":null,"exactCount":true}"#,
+        )
+        .unwrap();
+        assert_eq!(request.limit, 50);
+        assert_eq!(request.offset, 100);
+        assert!(request.exact_count);
+        assert_eq!(request.filters[0].operator, FilterOperator::GreaterThan);
+    }
+
+    #[test]
+    fn an_export_request_defaults_to_including_the_header() {
+        let request: ExportRequest = serde_json::from_str(
+            r#"{"path":"/tmp/x.csv","format":"csv","columns":["a"],"rows":[]}"#,
+        )
+        .unwrap();
+        assert!(request.include_header);
+        assert!(request.table_name.is_none());
+    }
+
+    #[test]
+    fn an_import_request_defaults_are_the_safe_ones() {
+        let request: ImportRequest = serde_json::from_str(
+            r#"{"path":"/tmp/x.csv","schema":"public","table":"t","mapping":[]}"#,
+        )
+        .unwrap();
+        assert!(request.has_header);
+        assert!(request.stop_on_error);
+        assert!(!request.truncate_first);
+        assert!(request.delimiter.is_none());
+        assert!(request.null_literal.is_none());
+    }
+
+    #[test]
+    fn a_column_meta_round_trips_in_camel_case() {
+        let column = ColumnMeta {
+            name: "created_at".into(),
+            data_type: "timestamptz".into(),
+            type_category: TypeCategory::Timestamp,
+            nullable: false,
+            default: Some("now()".into()),
+            is_primary_key: false,
+            is_unique: false,
+            is_identity: false,
+            is_generated: false,
+            comment: None,
+            ordinal: 3,
+            enum_values: Vec::new(),
+            max_length: None,
+        };
+        let json = serde_json::to_string(&column).unwrap();
+        assert!(json.contains("\"isPrimaryKey\""));
+        assert!(json.contains("\"typeCategory\":\"timestamp\""));
+        let back: ColumnMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.name, "created_at");
+        assert_eq!(back.ordinal, 3);
+    }
+
+    #[test]
+    fn a_row_change_parses_with_a_null_value() {
+        let change: RowChange = serde_json::from_str(
+            r#"{"schema":"public","table":"t",
+                "identity":{"kind":"primaryKey","columns":["id"]},
+                "identityValues":[1],"column":"note","value":null}"#,
+        )
+        .unwrap();
+        assert!(change.value.is_none());
+        assert_eq!(change.identity.kind, IdentityKind::PrimaryKey);
+    }
+
+    #[test]
+    fn transfer_progress_allows_an_unknown_percentage() {
+        let progress: TransferProgress = serde_json::from_str(
+            r#"{"token":"t","stage":"dump","percent":null,"message":"…","done":false}"#,
+        )
+        .unwrap();
+        assert!(progress.percent.is_none());
+        assert!(!progress.done);
+    }
+}

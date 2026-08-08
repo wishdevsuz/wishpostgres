@@ -1,6 +1,6 @@
 import { open as openFile } from '@tauri-apps/plugin-dialog';
 import { ArrowRight, FileUp, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -53,6 +53,19 @@ export function ImportDialog({
   const [nullLiteral, setNullLiteral] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const writable = useMemo(() => columns.filter((column) => !column.isGenerated), [columns]);
+
+  // Every opening starts from a clean slate; keeping the previous file's mapping
+  // silently pointed the import at columns the new file does not have.
+  useEffect(() => {
+    if (open) return;
+    setPath(null);
+    setPreview(null);
+    setMapping({});
+    setTruncateFirst(false);
+    setBusy(false);
+  }, [open]);
+
   async function pickFile() {
     const picked = await openFile({
       title: 'Choose a file to import',
@@ -63,8 +76,13 @@ export function ImportDialog({
       ],
     });
     if (typeof picked !== 'string') return;
+
+    // A .tsv is tab separated by definition; starting on a comma would parse
+    // the whole file as a single column.
+    const separator = /\.tsv$/i.test(picked) ? '\t' : delimiter;
     setPath(picked);
-    await loadPreview(picked, hasHeader, delimiter);
+    setDelimiter(separator);
+    await loadPreview(picked, hasHeader, separator);
   }
 
   async function loadPreview(file: string, header: boolean, separator: string) {
@@ -72,9 +90,10 @@ export function ImportDialog({
     try {
       const result = await transfer.previewImport(file, header, separator || ',');
       setPreview(result);
-      // Auto-map on exact then case-insensitive name matches.
+      // Auto-map on exact then case-insensitive name matches. Generated columns
+      // are skipped: PostgreSQL refuses to be given a value for them.
       const auto: Record<string, string> = {};
-      for (const column of columns) {
+      for (const column of writable) {
         const match =
           result.columns.find((name) => name === column.name) ??
           result.columns.find((name) => name.toLowerCase() === column.name.toLowerCase());
@@ -189,7 +208,8 @@ export function ImportDialog({
                     <SelectContent>
                       <SelectItem value=",">Comma</SelectItem>
                       <SelectItem value=";">Semicolon</SelectItem>
-                      <SelectItem value="\t">Tab</SelectItem>
+                      {/* A real tab: `"\t"` in JSX is a literal backslash. */}
+                      <SelectItem value={'\t'}>Tab</SelectItem>
                       <SelectItem value="|">Pipe</SelectItem>
                     </SelectContent>
                   </Select>
@@ -212,37 +232,35 @@ export function ImportDialog({
                   Column mapping
                 </h3>
                 <div className="grid gap-1.5 sm:grid-cols-2">
-                  {columns
-                    .filter((column) => !column.isGenerated)
-                    .map((column) => (
-                      <div key={column.name} className="flex items-center gap-2">
-                        <div className="flex w-[150px] shrink-0 items-center gap-1.5">
-                          <span className="truncate text-[12.5px]">{column.name}</span>
-                          {!column.nullable && column.default === null && (
-                            <Badge variant="caution">required</Badge>
-                          )}
-                        </div>
-                        <ArrowRight className="size-3 shrink-0 text-ink-faint" />
-                        <Select
-                          value={mapping[column.name] ?? SKIP}
-                          onValueChange={(value) =>
-                            setMapping((current) => ({ ...current, [column.name]: value }))
-                          }
-                        >
-                          <SelectTrigger className="flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={SKIP}>Skip this column</SelectItem>
-                            {preview.columns.map((source) => (
-                              <SelectItem key={source} value={source}>
-                                {source}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                  {writable.map((column) => (
+                    <div key={column.name} className="flex items-center gap-2">
+                      <div className="flex w-[150px] shrink-0 items-center gap-1.5">
+                        <span className="truncate text-[12.5px]">{column.name}</span>
+                        {!column.nullable && column.default === null && (
+                          <Badge variant="caution">required</Badge>
+                        )}
                       </div>
-                    ))}
+                      <ArrowRight className="size-3 shrink-0 text-ink-faint" />
+                      <Select
+                        value={mapping[column.name] ?? SKIP}
+                        onValueChange={(value) =>
+                          setMapping((current) => ({ ...current, [column.name]: value }))
+                        }
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SKIP}>Skip this column</SelectItem>
+                          {preview.columns.map((source) => (
+                            <SelectItem key={source} value={source}>
+                              {source}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
                 </div>
               </section>
 

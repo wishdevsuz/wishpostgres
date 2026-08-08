@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, Save, Search, Star, Trash2, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Clock, Copy, Save, Search, Star, Trash2, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { ConfirmDialog } from '@/components/dialogs/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge, EmptyState, Separator, Tooltip } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
+import { useClipboard } from '@/hooks/use-clipboard';
 import { useDebounced } from '@/hooks/use-debounced';
 import { prefs } from '@/services/api';
 import { notify } from '@/utils/notify';
 import { formatDuration, formatRelativeTime, summariseSql } from '@/utils/format';
+import type { SavedQuery } from '@/types';
 
 export function SavePanel({
   currentSql,
@@ -21,7 +24,9 @@ export function SavePanel({
   const [tab, setTab] = useState<'history' | 'saved'>('history');
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
+  const [confirming, setConfirming] = useState<'clearHistory' | SavedQuery | null>(null);
   const queryClient = useQueryClient();
+  const copy = useClipboard();
   const term = useDebounced(search, 200).trim().toLowerCase();
 
   const history = useQuery({ queryKey: ['history'], queryFn: prefs.history, staleTime: 5_000 });
@@ -56,6 +61,13 @@ export function SavePanel({
       notify.success('Query deleted');
       void queryClient.invalidateQueries({ queryKey: ['saved-queries'] });
     },
+    onError: (error) => notify.failure(error, 'Could not delete the query'),
+  });
+
+  const toggleFavorite = useMutation({
+    mutationFn: (entry: SavedQuery) => prefs.saveQuery({ ...entry, favorite: !entry.favorite }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['saved-queries'] }),
+    onError: (error) => notify.failure(error, 'Could not update the query'),
   });
 
   const clearHistory = useMutation({
@@ -64,6 +76,7 @@ export function SavePanel({
       notify.success('History cleared');
       void queryClient.invalidateQueries({ queryKey: ['history'] });
     },
+    onError: (error) => notify.failure(error, 'Could not clear the history'),
   });
 
   const historyRows = useMemo(
@@ -80,12 +93,17 @@ export function SavePanel({
 
   const savedRows = useMemo(
     () =>
-      (saved.data ?? []).filter(
-        (entry) =>
-          !term ||
-          entry.name.toLowerCase().includes(term) ||
-          entry.sql.toLowerCase().includes(term),
-      ),
+      (saved.data ?? [])
+        .filter(
+          (entry) =>
+            !term ||
+            entry.name.toLowerCase().includes(term) ||
+            entry.sql.toLowerCase().includes(term),
+        )
+        // Favourites first, so the queries kept on purpose stay reachable.
+        .sort((a, b) =>
+          a.favorite === b.favorite ? a.name.localeCompare(b.name) : a.favorite ? -1 : 1,
+        ),
     [saved.data, term],
   );
 
@@ -150,7 +168,8 @@ export function SavePanel({
             variant="ghost"
             size="sm"
             disabled={(history.data ?? []).length === 0}
-            onClick={() => clearHistory.mutate()}
+            loading={clearHistory.isPending}
+            onClick={() => setConfirming('clearHistory')}
           >
             <Trash2 />
             Clear history
@@ -230,7 +249,22 @@ export function SavePanel({
                 className="group/row flex cursor-default items-start gap-3 px-3 py-2 hover:bg-[#ffffff06]"
                 onDoubleClick={() => onUse(entry.sql)}
               >
-                <Star className="mt-[3px] size-3.5 shrink-0 text-caution" />
+                <Tooltip content={entry.favorite ? 'Remove from favorites' : 'Add to favorites'}>
+                  <button
+                    type="button"
+                    aria-label="Toggle favorite"
+                    className="mt-[2px] shrink-0"
+                    onClick={() => toggleFavorite.mutate(entry)}
+                  >
+                    <Star
+                      className={
+                        entry.favorite
+                          ? 'size-3.5 fill-caution text-caution'
+                          : 'size-3.5 text-ink-faint hover:text-caution'
+                      }
+                    />
+                  </button>
+                </Tooltip>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12.5px] font-medium text-ink">{entry.name}</p>
                   <p className="truncate font-mono text-[11.5px] text-ink-faint">
@@ -241,12 +275,22 @@ export function SavePanel({
                   <Button variant="subtle" size="xs" onClick={() => onUse(entry.sql)}>
                     Load
                   </Button>
+                  <Tooltip content="Copy SQL">
+                    <Button
+                      variant="ghost"
+                      size="iconXs"
+                      aria-label="Copy SQL"
+                      onClick={() => void copy(entry.sql)}
+                    >
+                      <Copy />
+                    </Button>
+                  </Tooltip>
                   <Tooltip content="Delete">
                     <Button
                       variant="ghost"
                       size="iconXs"
                       aria-label="Delete saved query"
-                      onClick={() => removeQuery.mutate(entry.id)}
+                      onClick={() => setConfirming(entry)}
                     >
                       <Trash2 />
                     </Button>
@@ -257,6 +301,34 @@ export function SavePanel({
           </ul>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirming === 'clearHistory'}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title="Clear the query history?"
+        description="Every recorded statement is removed. Saved queries are not affected."
+        confirmLabel="Clear history"
+        destructive
+        onConfirm={() => clearHistory.mutateAsync()}
+      />
+
+      <ConfirmDialog
+        open={confirming !== null && confirming !== 'clearHistory'}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={
+          confirming && confirming !== 'clearHistory'
+            ? `Delete “${confirming.name}”?`
+            : 'Delete this query?'
+        }
+        description="The saved query is removed. This cannot be undone."
+        confirmLabel="Delete query"
+        destructive
+        onConfirm={async () => {
+          if (confirming && confirming !== 'clearHistory') {
+            await removeQuery.mutateAsync(confirming.id);
+          }
+        }}
+      />
     </div>
   );
 }

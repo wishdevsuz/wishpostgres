@@ -10,6 +10,7 @@ import type {
   DatabaseInfo,
   DeleteRequest,
   ExportRequest,
+  ExtensionAction,
   ExtensionInfo,
   FunctionInfo,
   HistoryEntry,
@@ -113,6 +114,8 @@ export const structure = {
     call<string>('rename_relation', { ...scope }),
   truncate: (scope: TableScope) => call<string>('truncate_table', { ...scope }),
   drop: (scope: TableScope & { cascade: boolean }) => call<string>('drop_relation', { ...scope }),
+  setExtension: (scope: Scope & { name: string; action: ExtensionAction }) =>
+    call<string>('set_extension', { ...scope }),
 };
 
 export const sql = {
