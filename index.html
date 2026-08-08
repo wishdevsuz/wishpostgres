@@ -125,7 +125,7 @@
       </header>
 
       <h2>Install anywhere</h2>
-      <pre><code>curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/install.sh | bash</code></pre>
+      <pre><code>curl -fsSL https://wishdevsuz.github.io/wishpostgres/install.sh | bash</code></pre>
       <p class="note">
         Detects your distribution, verifies the download against the published
         checksums and installs the right package.
@@ -135,9 +135,9 @@
 
       <h2>Debian, Ubuntu and derivatives</h2>
       <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://wishdevsuz.github.io/wish-pgAdmin/wishpostgres.gpg \
+curl -fsSL https://wishdevsuz.github.io/wishpostgres/wishpostgres.gpg \
   | sudo tee /etc/apt/keyrings/wishpostgres.gpg &gt; /dev/null
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/wishpostgres.gpg] https://wishdevsuz.github.io/wish-pgAdmin/apt stable main" \
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/wishpostgres.gpg] https://wishdevsuz.github.io/wishpostgres/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/wishpostgres.list &gt; /dev/null
 sudo apt update
 sudo apt install wishpostgres</code></pre>
@@ -147,7 +147,15 @@ sudo apt install wishpostgres</code></pre>
       </p>
 
       <h2>Fedora, RHEL, openSUSE</h2>
-      <pre><code>sudo dnf install https://github.com/wishdevsuz/wish-pgAdmin/releases/latest/download/wishpostgres-1.0.0-1.x86_64.rpm</code></pre>
+      <pre><code>curl -fsSL https://wishdevsuz.github.io/wishpostgres/install.sh | bash</code></pre>
+      <p class="note">
+        The same installer handles rpm distributions. To do it by hand, take the
+        <code>.rpm</code> from the
+        <a href="https://github.com/wishdevsuz/wishpostgres/releases/latest"
+          >latest release</a
+        >
+        and run <code>sudo dnf install ./wishpostgres-&lt;version&gt;-1.x86_64.rpm</code>.
+      </p>
 
       <h2>What you need</h2>
       <table>
@@ -172,10 +180,10 @@ sudo apt install wishpostgres</code></pre>
       </table>
 
       <footer>
-        <a href="https://github.com/wishdevsuz/wish-pgAdmin">Source</a> ·
-        <a href="https://github.com/wishdevsuz/wish-pgAdmin/releases">Releases</a>
+        <a href="https://github.com/wishdevsuz/wishpostgres">Source</a> ·
+        <a href="https://github.com/wishdevsuz/wishpostgres/releases">Releases</a>
         ·
-        <a href="https://github.com/wishdevsuz/wish-pgAdmin/issues">Issues</a>
+        <a href="https://github.com/wishdevsuz/wishpostgres/issues">Issues</a>
         · MIT
       </footer>
     </main>

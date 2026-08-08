@@ -15,3 +15,20 @@ SHA512: 4e0c0c2e2a9b3e81fc7635c0136c8b9df96abac43eaf5a0d4926b57cc53c20e5e67838d6
 Description: A fast, lightweight PostgreSQL desktop manager
  WishPostgres is a modern, lightweight desktop client for PostgreSQL: browse and edit data, design tables, run SQL, import and export, and back up databases.
 
+Package: wishpostgres
+Architecture: amd64
+Version: 1.0.2
+Priority: optional
+Section: database
+Maintainer: WishPostgres
+Installed-Size: 8469
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: pool/main/w/wishpostgres/wishpostgres_1.0.2_amd64.deb
+Size: 4111232
+MD5sum: cac3b4a1bbefb91ea52bfea7d624ac66
+SHA1: f0235dad09d5b503ca1ded1bb70dc513b8ba0eff
+SHA256: 6f6be8641829c17785becfad6b0d9f8b58aaa960256c620674e356ccddc86b1b
+SHA512: 23f54207a74ac9aaf1464c2b3d0265288c06a29ca5d7555f22384b08522981b0de1d0ba23cb2a1f67b7bfc6ccdf0980536f02b157772da1700e35f08c6f6a7b7
+Description: A fast, lightweight PostgreSQL desktop manager
+ WishPostgres is a modern, lightweight desktop client for PostgreSQL: browse and edit data, design tables, run SQL, import and export, and back up databases.
+
